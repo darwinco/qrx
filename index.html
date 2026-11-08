@@ -26,7 +26,7 @@
     #modalShortCodeText {
       position: absolute;
       top: 82%;   
-      left: 75%;  
+      left: 76%;  
       transform: translate(-50%, -50%);
       font-family: monospace;
       font-weight: bold;
@@ -410,7 +410,7 @@
               en píxeles de tu imagen "boceto.fw.png".
             */
             const qrSize = 296;                  // Tamaño fijo en píxeles del QR en la imagen final
-            const qrX = (imgWidth * 0.75) - (qrSize / 2);  // Coordenada X fija (ej. 63% del ancho real)
+            const qrX = (imgWidth * 0.76) - (qrSize / 2);  // Coordenada X fija (ej. 63% del ancho real)
             const qrY = (imgHeight * 0.71) - (qrSize / 2); // Coordenada Y fija (ej. 54% del alto real)
 
             // Fondo blanco para el QR
@@ -422,10 +422,10 @@
 
             // 3. Dibujar el código corto en coordenadas fijas en píxeles
             ctx.fillStyle = "#999999";
-            ctx.font = "bold 42px monospace";
+            ctx.font = "bold 40px monospace";
             ctx.textAlign = "center";
             
-            const textX = imgWidth * 0.75;   // Coordenada X fija para el texto
+            const textX = imgWidth * 0.76;   // Coordenada X fija para el texto
             const textY = imgHeight * 0.83;  // Coordenada Y fija para el texto (debajo del QR)
             
             ctx.fillText(code, textX, textY);
