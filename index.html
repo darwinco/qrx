@@ -421,12 +421,12 @@
             ctx.drawImage(qrSource, qrX, qrY, qrSize, qrSize);
 
             // 3. Dibujar el código corto en coordenadas fijas en píxeles
-            ctx.fillStyle = "#666666";
+            ctx.fillStyle = "#999999";
             ctx.font = "bold 42px monospace";
             ctx.textAlign = "center";
             
             const textX = imgWidth * 0.75;   // Coordenada X fija para el texto
-            const textY = imgHeight * 0.84;  // Coordenada Y fija para el texto (debajo del QR)
+            const textY = imgHeight * 0.83;  // Coordenada Y fija para el texto (debajo del QR)
             
             ctx.fillText(code, textX, textY);
 
