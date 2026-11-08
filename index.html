@@ -363,7 +363,7 @@
       
       document.getElementById("modalShortCodeText").innerText = code;
 
-      new QRCode(container, { text: url, width: 85, height: 85 });
+      new QRCode(container, { text: url, width: 296, height: 296 });
       
       const btnDownload = document.getElementById("templateDownloadBtn");
       btnDownload.onclick = () => downloadIntegratedTemplate(url, code);
