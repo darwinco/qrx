@@ -7,13 +7,48 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="config.js"></script>
+  <style>
+    .template-container {
+      position: relative;
+      display: inline-block;
+      max-width: 450px;
+      width: 100%;
+    }
+    .template-img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    /* Coordenadas independientes para el Código Corto */
+    .qr-shortcode-label {
+      position: absolute;
+      top: 45%;   /* Coordenada Y (vertical) del código corto */
+      left: 63%;  /* Coordenada X (horizontal) del código corto */
+      transform: translate(-50%, -50%);
+      font-family: monospace;
+      font-weight: bold;
+      font-size: 14px;
+      color: #000;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    /* Coordenadas independientes para el Botón de Descarga en el modal */
+    .qr-download-btn {
+      position: absolute;
+      top: 72%;   /* Coordenada Y (vertical) del botón */
+      left: 63%;  /* Coordenada X (horizontal) del botón */
+      transform: translate(-50%, -50%);
+      z-index: 10;
+    }
+  </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
 
   <!-- PANTALLA DE CARGA / REDIRECCIÓN PÚBLICA -->
   <div id="redirectSection" class="hidden flex flex-col items-center justify-center min-h-screen">
     <div class="p-8 bg-white rounded-lg shadow-md text-center max-w-sm w-full">
-      <!-- Imagen de redirección agregada -->
       <img src="redirect.webp" alt="Redirigiendo..." class="w-28 h-28 mx-auto mb-4 object-contain">
       <h2 class="text-xl font-bold text-gray-800 mb-2">Redireccionando...</h2>
       <p class="text-gray-600 text-sm mb-4">Por favor espera un momento.</p>
@@ -93,13 +128,29 @@
     </div>
   </div>
 
-  <!-- MODAL MOSTRAR QR -->
+  <!-- MODAL MOSTRAR QR CON PLANTILLA INTEGRADA -->
   <div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-    <div class="bg-white p-6 rounded-lg text-center max-w-sm w-full">
-      <h3 class="text-lg font-bold mb-4">Código QR del Enlace</h3>
-      <div id="qrcode" class="flex justify-center mb-4"></div>
-      <div id="modalDownloadContainer" class="mb-4"></div>
-      <button onclick="closeQrModal()" class="bg-gray-500 text-white px-4 py-2 rounded w-full">Cerrar</button>
+    <div class="bg-white p-6 rounded-lg text-center max-w-lg w-full relative">
+      <h3 class="text-lg font-bold mb-4">Vista Previa de Plantilla con QR</h3>
+      
+      <div class="template-container mx-auto mb-4 shadow border rounded">
+        <img src="boceto.fw.png" alt="Plantilla Boceto" class="template-img">
+        
+        <!-- Código corto en pantalla (Independiente) -->
+        <div id="modalShortCodeText" class="qr-shortcode-label"></div>
+
+        <!-- Contenedor del código QR (Independiente - top: 54%, left: 63%) -->
+        <div id="modalQrBox" class="absolute" style="top: 54%; left: 63%; transform: translate(-50%, -50%); width: 85px; height: 85px; background: white; display: flex; align-items: center; justify-content: center;">
+          <div id="qrcode"></div>
+        </div>
+
+        <!-- Botón para descargar la plantilla completa integrada -->
+        <button id="templateDownloadBtn" class="qr-download-btn bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow-lg hover:bg-emerald-700 transition">
+          📥 Descargar Plantilla Completa
+        </button>
+      </div>
+
+      <button onclick="closeQrModal()" class="bg-gray-500 text-white px-4 py-2 rounded w-full font-semibold">Cerrar</button>
     </div>
   </div>
 
@@ -216,8 +267,8 @@
             <td class="p-4 font-semibold">${link.clicks}</td>
             <td class="p-4">${link.notes}</td>
             <td class="p-4 space-x-2">
-              <button onclick="showQR('${shortUrl}', '${link.shortCode}')" class="bg-indigo-500 text-white px-3 py-1 rounded text-sm mb-1">Ver QR</button>
-              <button onclick="downloadQRDirect('${shortUrl}', '${link.shortCode}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm">Descargar PNG</button>
+              <button onclick="showQR('${shortUrl}', '${link.shortCode}')" class="bg-indigo-500 text-white px-3 py-1 rounded text-sm mb-1">Ver Plantilla QR</button>
+              <button onclick="downloadIntegratedTemplate('${shortUrl}', '${link.shortCode}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm">Descargar Plantilla</button>
             </td>
             <td class="p-4 space-x-2">
               <button onclick="editLink('${link.id}', '${link.targetUrl}', '${link.notes}')" class="bg-yellow-500 text-white px-2 py-1 rounded text-sm">Editar</button>
@@ -297,32 +348,94 @@
     function showQR(url, code) {
       const container = document.getElementById("qrcode");
       container.innerHTML = "";
-      new QRCode(container, { text: url, width: 180, height: 180 });
       
-      const dlContainer = document.getElementById("modalDownloadContainer");
-      dlContainer.innerHTML = `<button onclick="downloadQRDirect('${url}', '${code}')" class="mt-3 bg-emerald-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-emerald-700 w-full">Descargar QR en PNG</button>`;
+      // Mostrar solo el código corto (sin prefijo)
+      document.getElementById("modalShortCodeText").innerText = code;
+
+      // Generar el código QR en la vista previa
+      new QRCode(container, { text: url, width: 85, height: 85 });
+      
+      // Asignar acción al botón del modal
+      const btnDownload = document.getElementById("templateDownloadBtn");
+      btnDownload.onclick = () => downloadIntegratedTemplate(url, code);
       
       document.getElementById("qrModal").classList.remove("hidden");
     }
 
-    function downloadQRDirect(url, code) {
-      const tempDiv = document.createElement("div");
-      document.body.appendChild(tempDiv);
-      new QRCode(tempDiv, { text: url, width: 300, height: 300 });
+    // Función optimizada para fusionar la plantilla, QR y código corto en un solo PNG descargable
+    function downloadIntegratedTemplate(url, code) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
 
-      setTimeout(() => {
-        const canvas = tempDiv.querySelector("canvas");
-        if (canvas) {
-          const pngUrl = canvas.toDataURL("image/png");
-          const downloadLink = document.createElement("a");
-          downloadLink.href = pngUrl;
-          downloadLink.download = `QR_${code}.png`;
-          document.body.appendChild(downloadLink);
-          downloadLink.click();
-          document.body.removeChild(downloadLink);
-        }
-        document.body.removeChild(tempDiv);
-      }, 100);
+      const templateImg = new Image();
+      templateImg.crossOrigin = "anonymous";
+      templateImg.src = "boceto.fw.png";
+
+      templateImg.onload = () => {
+        canvas.width = templateImg.naturalWidth || 1200;
+        canvas.height = templateImg.naturalHeight || 1600;
+
+        // 1. Dibujar plantilla base
+        ctx.drawImage(templateImg, 0, 0);
+
+        // 2. Generar QR temporalmente para extraerlo
+        const tempDiv = document.createElement("div");
+        document.body.appendChild(tempDiv);
+        new QRCode(tempDiv, { text: url, width: 400, height: 400 });
+
+        setTimeout(() => {
+          const qrCanvas = tempDiv.querySelector("canvas");
+          const qrImg = tempDiv.querySelector("img");
+
+          const proceedDrawing = (qrSource) => {
+            // Coordenadas independientes para el código QR en el canvas final
+            const qrSize = 350;
+            const qrX = (canvas.width * 0.63) - (qrSize / 2);
+            const qrY = (canvas.height * 0.54) - (qrSize / 2);
+
+            // Fondo blanco para el QR
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20);
+
+            // Dibujar QR
+            ctx.drawImage(qrSource, qrX, qrY, qrSize, qrSize);
+
+            // 3. Coordenadas independientes para pintar el código corto (sin prefijo)
+            ctx.fillStyle = "#000000";
+            ctx.font = "bold 36px monospace";
+            ctx.textAlign = "center";
+            const textX = canvas.width * 0.63;
+            const textY = canvas.height * 0.45; 
+            ctx.fillText(code, textX, textY);
+
+            // 4. Descargar imagen resultante
+            const pngUrl = canvas.toDataURL("image/png");
+            const downloadLink = document.createElement("a");
+            downloadLink.href = pngUrl;
+            downloadLink.download = `Plantilla_QR_${code}.png`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            document.body.removeChild(tempDiv);
+          };
+
+          if (qrCanvas) {
+            proceedDrawing(qrCanvas);
+          } else if (qrImg) {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => proceedDrawing(img);
+            img.src = qrImg.src;
+          } else {
+            alert("No se pudo generar el código QR para la descarga.");
+            document.body.removeChild(tempDiv);
+          }
+        }, 200);
+      };
+
+      templateImg.onerror = () => {
+        alert("No se pudo cargar la imagen 'boceto.fw.png'. Verifica que esté en la misma carpeta.");
+      };
     }
 
     function closeQrModal() {
