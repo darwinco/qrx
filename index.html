@@ -19,11 +19,14 @@
       height: auto;
       display: block;
     }
-    /* Coordenadas independientes para el Código Corto */
-    .qr-shortcode-label {
+    /* 
+      MODIFICA AQUÍ TUS COORDENADAS X e Y (en porcentaje) 
+      Se reflejarán exactamente iguales tanto en la vista previa como en la descarga.
+    */
+    #modalShortCodeText {
       position: absolute;
-      top: 70%;   /* Coordenada Y (vertical) del código corto */
-      left: 72%;  /* Coordenada X (horizontal) del código corto */
+      top: 45%;   /* Coordenada Y del código corto */
+      left: 63%;  /* Coordenada X del código corto */
       transform: translate(-50%, -50%);
       font-family: monospace;
       font-weight: bold;
@@ -34,11 +37,23 @@
       padding: 1px 6px;
       border-radius: 4px;
     }
-    /* Coordenadas independientes para el Botón de Descarga en el modal */
+    #modalQrBox {
+      position: absolute;
+      top: 54%;   /* Coordenada Y del código QR */
+      left: 63%;  /* Coordenada X del código QR */
+      transform: translate(-50%, -50%);
+      width: 85px; 
+      height: 85px; 
+      background: white; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      z-index: 10;
+    }
     .qr-download-btn {
       position: absolute;
-      top: 100%;   /* Coordenada Y (vertical) del botón */
-      left: 50%;  /* Coordenada X (horizontal) del botón */
+      top: 72%;   /* Coordenada Y del botón dentro del modal */
+      left: 63%;  /* Coordenada X del botón dentro del modal */
       transform: translate(-50%, -50%);
       z-index: 10;
     }
@@ -136,11 +151,11 @@
       <div class="template-container mx-auto mb-4 shadow border rounded">
         <img src="boceto.fw.png" alt="Plantilla Boceto" class="template-img">
         
-        <!-- Código corto en pantalla (Independiente) -->
-        <div id="modalShortCodeText" class="qr-shortcode-label"></div>
+        <!-- Código corto en pantalla -->
+        <div id="modalShortCodeText"></div>
 
-        <!-- Contenedor del código QR (Independiente - top: 54%, left: 63%) -->
-        <div id="modalQrBox" class="absolute" style="top: 60%; left: 69%; transform: translate(-50%, -50%); width: 85px; height: 85px; background: white; display: flex; align-items: center; justify-content: center;">
+        <!-- Contenedor del código QR -->
+        <div id="modalQrBox">
           <div id="qrcode"></div>
         </div>
 
@@ -349,20 +364,19 @@
       const container = document.getElementById("qrcode");
       container.innerHTML = "";
       
-      // Mostrar solo el código corto (sin prefijo)
+      // Mostrar el código corto
       document.getElementById("modalShortCodeText").innerText = code;
 
       // Generar el código QR en la vista previa
       new QRCode(container, { text: url, width: 85, height: 85 });
       
-      // Asignar acción al botón del modal
       const btnDownload = document.getElementById("templateDownloadBtn");
       btnDownload.onclick = () => downloadIntegratedTemplate(url, code);
       
       document.getElementById("qrModal").classList.remove("hidden");
     }
 
-    // Función optimizada para fusionar la plantilla, QR y código corto en un solo PNG descargable
+    // Función de exportación basada en los mismos porcentajes CSS
     function downloadIntegratedTemplate(url, code) {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
@@ -372,43 +386,47 @@
       templateImg.src = "boceto.fw.png";
 
       templateImg.onload = () => {
-        canvas.width = templateImg.naturalWidth || 1200;
-        canvas.height = templateImg.naturalHeight || 1600;
+        const imgWidth = templateImg.naturalWidth || 1200;
+        const imgHeight = templateImg.naturalHeight || 1600;
 
-        // 1. Dibujar plantilla base
+        canvas.width = imgWidth;
+        canvas.height = imgHeight;
+
+        // 1. Dibujar la plantilla base
         ctx.drawImage(templateImg, 0, 0);
 
-        // 2. Generar QR temporalmente para extraerlo
+        // 2. Generar QR temporalmente para extraerlo a alta resolución
         const tempDiv = document.createElement("div");
         document.body.appendChild(tempDiv);
-        new QRCode(tempDiv, { text: url, width: 400, height: 400 });
+        new QRCode(tempDiv, { text: url, width: 500, height: 500 });
 
         setTimeout(() => {
           const qrCanvas = tempDiv.querySelector("canvas");
           const qrImg = tempDiv.querySelector("img");
 
           const proceedDrawing = (qrSource) => {
-            // Coordenadas independientes para el código QR en el canvas final
-            const qrSize = 350;
-            const qrX = (canvas.width * 0.63) - (qrSize / 2);
-            const qrY = (canvas.height * 0.54) - (qrSize / 2);
+            // USAMOS LOS MISMOS PORCENTAJES CSS (top: 54%, left: 63%) 
+            // aplicados directamente al tamaño real de la imagen exportada:
+            const qrSize = imgWidth * 0.22; // Tamaño proporcional del QR respecto al ancho de la plantilla
+            const qrX = (imgWidth * 0.63) - (qrSize / 2);
+            const qrY = (imgHeight * 0.54) - (qrSize / 2);
 
-            // Fondo blanco para el QR
+            // Fondo blanco opcional detrás del QR para asegurar lectura perfecta
             ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20);
 
-            // Dibujar QR
+            // Dibujar el código QR en las coordenadas exactas calculadas por porcentaje
             ctx.drawImage(qrSource, qrX, qrY, qrSize, qrSize);
 
-            // 3. Coordenadas independientes para pintar el código corto (sin prefijo)
+            // 3. Dibujar el código corto usando su porcentaje CSS (top: 45%, left: 63%)
             ctx.fillStyle = "#000000";
-            ctx.font = "bold 36px monospace";
+            ctx.font = "bold 42px monospace";
             ctx.textAlign = "center";
-            const textX = canvas.width * 0.63;
-            const textY = canvas.height * 0.45; 
+            const textX = imgWidth * 0.63;
+            const textY = imgHeight * 0.45; 
             ctx.fillText(code, textX, textY);
 
-            // 4. Descargar imagen resultante
+            // 4. Descargar la imagen resultante en alta calidad
             const pngUrl = canvas.toDataURL("image/png");
             const downloadLink = document.createElement("a");
             downloadLink.href = pngUrl;
@@ -427,7 +445,7 @@
             img.onload = () => proceedDrawing(img);
             img.src = qrImg.src;
           } else {
-            alert("No se pudo generar el código QR para la descarga.");
+            alert("No se pudo generar el código QR.");
             document.body.removeChild(tempDiv);
           }
         }, 200);
