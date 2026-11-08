@@ -390,8 +390,8 @@
           const proceedDrawing = (qrSource) => {
             // Coordenadas independientes para el código QR en el canvas final
             const qrSize = 350;
-            const qrX = (canvas.width * 0.63) - (qrSize / 2);
-            const qrY = (canvas.height * 0.54) - (qrSize / 2);
+            const qrX = (canvas.width * 0.68) - (qrSize / 2);
+            const qrY = (canvas.height * 0.60) - (qrSize / 2);
 
             // Fondo blanco para el QR
             ctx.fillStyle = "#FFFFFF";
@@ -405,7 +405,7 @@
             ctx.font = "bold 36px monospace";
             ctx.textAlign = "center";
             const textX = canvas.width * 0.63;
-            const textY = canvas.height * 0.45; 
+            const textY = canvas.height * 0.80; 
             ctx.fillText(code, textX, textY);
 
             // 4. Descargar imagen resultante
