@@ -408,8 +408,8 @@
             // USAMOS LOS MISMOS PORCENTAJES CSS (top: 54%, left: 63%) 
             // aplicados directamente al tamaño real de la imagen exportada:
             const qrSize = imgWidth * 0.22; // Tamaño proporcional del QR respecto al ancho de la plantilla
-            const qrX = (imgWidth * 0.63) - (qrSize / 2);
-            const qrY = (imgHeight * 0.54) - (qrSize / 2);
+            const qrX = (imgWidth * 0.68) - (qrSize / 2);
+            const qrY = (imgHeight * 0.69) - (qrSize / 2);
 
             // Fondo blanco opcional detrás del QR para asegurar lectura perfecta
             ctx.fillStyle = "#FFFFFF";
@@ -422,15 +422,15 @@
             ctx.fillStyle = "#000000";
             ctx.font = "bold 42px monospace";
             ctx.textAlign = "center";
-            const textX = imgWidth * 0.63;
-            const textY = imgHeight * 0.45; 
+            const textX = imgWidth * 0.82;
+            const textY = imgHeight * 0.75; 
             ctx.fillText(code, textX, textY);
 
             // 4. Descargar la imagen resultante en alta calidad
             const pngUrl = canvas.toDataURL("image/png");
             const downloadLink = document.createElement("a");
             downloadLink.href = pngUrl;
-            downloadLink.download = `Plantilla_QR_${code}.png`;
+            downloadLink.download = `${code}.png`;
             document.body.appendChild(downloadLink);
             downloadLink.click();
             document.body.removeChild(downloadLink);
