@@ -42,8 +42,8 @@
       top: 68%;   /* Coordenada Y del código QR */
       left: 69%;  /* Coordenada X del código QR */
       transform: translate(-50%, -50%);
-      width: 85px; 
-      height: 85px; 
+      width: 90px; 
+      height: 90px; 
       background: white; 
       display: flex; 
       align-items: center; 
@@ -408,8 +408,8 @@
             // USAMOS LOS MISMOS PORCENTAJES CSS (top: 54%, left: 63%) 
             // aplicados directamente al tamaño real de la imagen exportada:
             const qrSize = imgWidth * 0.22; // Tamaño proporcional del QR respecto al ancho de la plantilla
-            const qrX = (imgWidth * 0.68) - (qrSize / 2);
-            const qrY = (imgHeight * 0.69) - (qrSize / 2);
+            const qrX = (imgWidth * 0.70) - (qrSize / 3);
+            const qrY = (imgHeight * 0.69) - (qrSize / 3);
 
             // Fondo blanco opcional detrás del QR para asegurar lectura perfecta
             ctx.fillStyle = "#FFFFFF";
@@ -422,8 +422,8 @@
             ctx.fillStyle = "#000000";
             ctx.font = "bold 42px monospace";
             ctx.textAlign = "center";
-            const textX = imgWidth * 0.82;
-            const textY = imgHeight * 0.75; 
+            const textX = imgWidth * 0.90;
+            const textY = imgHeight * 0.80; 
             ctx.fillText(code, textX, textY);
 
             // 4. Descargar la imagen resultante en alta calidad
