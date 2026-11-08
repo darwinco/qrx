@@ -410,8 +410,8 @@
               en píxeles de tu imagen "boceto.fw.png".
             */
             const qrSize = 350;                  // Tamaño fijo en píxeles del QR en la imagen final
-            const qrX = (imgWidth * 0.63) - (qrSize / 2);  // Coordenada X fija (ej. 63% del ancho real)
-            const qrY = (imgHeight * 0.54) - (qrSize / 2); // Coordenada Y fija (ej. 54% del alto real)
+            const qrX = (imgWidth * 0.68) - (qrSize / 2);  // Coordenada X fija (ej. 63% del ancho real)
+            const qrY = (imgHeight * 0.69) - (qrSize / 2); // Coordenada Y fija (ej. 54% del alto real)
 
             // Fondo blanco para el QR
             ctx.fillStyle = "#FFFFFF";
@@ -425,8 +425,8 @@
             ctx.font = "bold 42px monospace";
             ctx.textAlign = "center";
             
-            const textX = imgWidth * 0.63;   // Coordenada X fija para el texto
-            const textY = imgHeight * 0.45;  // Coordenada Y fija para el texto (encima del QR)
+            const textX = imgWidth * 0.75;   // Coordenada X fija para el texto
+            const textY = imgHeight * 0.82;  // Coordenada Y fija para el texto (encima del QR)
             
             ctx.fillText(code, textX, textY);
 
@@ -434,7 +434,7 @@
             const pngUrl = canvas.toDataURL("image/png");
             const downloadLink = document.createElement("a");
             downloadLink.href = pngUrl;
-            downloadLink.download = `Plantilla_QR_${code}.png`;
+            downloadLink.download = `${code}.png`;
             document.body.appendChild(downloadLink);
             downloadLink.click();
             document.body.removeChild(downloadLink);
