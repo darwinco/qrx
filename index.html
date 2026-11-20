@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestor de Enlaces y Códigos QR</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <style>
+    .template-container {
+      position: relative;
+      display: inline-block;
+      max-width: 450px;
+      width: 100%;
+    }
+    .template-img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    /* 
+      POSICIONAMIENTO EN PANTALLA (Vista Previa del Modal)
+      Puedes ajustar estos valores si deseas mover visualmente los elementos en la previsualización.
+    */
+    #modalShortCodeText {
+      position: absolute;
+      top: 82%;   
+      left: 76%;  
+      transform: translate(-50%, -50%);
+      font-family: monospace;
+      font-weight: bold;
+      font-size: 14px;
+      color: #000;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    #modalQrBox {
+      position: absolute;
+      top: 69%;   
+      left: 72%;  
+      transform: translate(-50%, -50%);
+      width: 100px; 
+      height: 100px; 
+      background: white; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      z-index: 10;
+    }
+    .qr-download-btn {
+      position: absolute;
+      top: 100%;   
+      left: 50%;  
+      transform: translate(-50%, -50%);
+      z-index: 10;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- PANTALLA DE CARGA / REDIRECCIÓN PÚBLICA -->
+  <div id="redirectSection" class="hidden flex flex-col items-center justify-center min-h-screen">
+    <div class="p-8 bg-white rounded-lg shadow-md text-center max-w-sm w-full">
+      <img src="redirect.webp" alt="Redirigiendo..." class="w-28 h-28 mx-auto mb-4 object-contain">
+      <h2 class="text-xl font-bold text-gray-800 mb-2">Redireccionando...</h2>
+      <p class="text-gray-600 text-sm mb-4">Por favor espera un momento.</p>
+      <a id="manualLink" href="#" class="text-blue-600 underline text-xs hidden">Haz clic aquí si no redirige automáticamente</a>
+    </div>
+  </div>
+
+  <!-- VISTA DE LOGIN -->
+  <div id="loginSection" class="flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+      <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">Panel Administrador</h2>
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Usuario</label>
+          <input type="text" id="userInput" required class="w-full mt-1 p-2 border rounded focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Contraseña</label>
+          <input type="password" id="passInput" required class="w-full mt-1 p-2 border rounded focus:ring-blue-500">
+        </div>
+        <p id="loginError" class="text-red-500 text-sm hidden">Usuario o contraseña incorrectos</p>
+        <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded font-semibold hover:bg-blue-700">Ingresar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- PANEL DE ADMINISTRACIÓN -->
+  <div id="adminSection" class="hidden container mx-auto p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-3xl font-bold text-gray-800">Administración de Enlaces y Códigos QR</h1>
+      <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Cerrar Sesión</button>
+    </div>
+
+    <!-- FORMULARIO CREAR ENLACE -->
+    <div class="bg-white p-6 rounded-lg shadow mb-8">
+      <h3 class="text-lg font-semibold mb-4">Crear Nuevo Enlace y QR</h3>
+      <form onsubmit="createLink(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input type="url" id="targetUrl" placeholder="URL Destino (https://...)" required class="p-2 border rounded">
+        <input type="text" id="shortCode" placeholder="Código corto (Opcional)" class="p-2 border rounded">
+        <input type="text" id="notes" placeholder="Notas o Descripción" class="p-2 border rounded">
+        <button type="submit" class="md:col-span-3 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Guardar y Generar</button>
+      </form>
+    </div>
+
+    <!-- CONTROLES, BOTÓN ACTUALIZAR Y BUSCADOR -->
+    <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+      <div class="flex items-center space-x-3 w-full md:w-auto">
+        <button onclick="deleteSelectedLinks()" class="bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700 text-sm shadow">Eliminar Seleccionados</button>
+        <button onclick="loadLinks()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow flex items-center gap-1">
+          🔄 Actualizar
+        </button>
+        <span id="selectedCount" class="text-gray-600 text-sm">0 elementos seleccionados</span>
+      </div>
+      <div class="w-full md:w-72">
+        <input type="text" id="searchInput" oninput="filterLinks()" placeholder="🔍 Buscar por código, URL o notas..." class="w-full p-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500">
+      </div>
+    </div>
+
+    <!-- TABLA DE GESTIÓN -->
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-gray-50 border-b">
+            <th class="p-4 w-12 text-center">
+              <input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)" class="w-4 h-4 text-blue-600 rounded">
+            </th>
+            <th class="p-4">Código Corto</th>
+            <th class="p-4">URL Destino</th>
+            <th class="p-4">Clics</th>
+            <th class="p-4">Notas</th>
+            <th class="p-4">QR / Descarga</th>
+            <th class="p-4">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="linksTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MODAL MOSTRAR QR CON PLANTILLA INTEGRADA -->
+  <div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+    <div class="bg-white p-6 rounded-lg text-center max-w-lg w-full relative">
+      <h3 class="text-lg font-bold mb-4">Vista Previa de Plantilla con QR</h3>
+      
+      <div class="template-container mx-auto mb-4 shadow border rounded">
+        <img src="boceto.fw.png" alt="Plantilla Boceto" class="template-img">
+        
+        <div id="modalShortCodeText"></div>
+
+        <div id="modalQrBox">
+          <div id="qrcode"></div>
+        </div>
+
+        <button id="templateDownloadBtn" class="qr-download-btn bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow-lg hover:bg-emerald-700 transition">
+          📥 Descargar Plantilla Completa
+        </button>
+      </div>
+
+      <button onclick="closeQrModal()" class="bg-gray-500 text-white px-4 py-2 rounded w-full font-semibold">Cerrar</button>
+    </div>
+  </div>
+
+  <script>
+    const baseUrl = window.location.href.split('?')[0];
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectCode = urlParams.get('r');
+
+    let allLinksData = [];
+
+    window.onload = () => {
+      if (redirectCode) {
+        handleRedirect(redirectCode);
+      } else {
+        const hasToken = !!localStorage.getItem("admin_token");
+        if (hasToken) showAdminPanel();
+      }
+    };
+
+    async function handleRedirect(code) {
+      document.getElementById("loginSection").classList.add("hidden");
+      document.getElementById("redirectSection").classList.remove("hidden");
+
+      try {
+        const response = await fetch(`${CONFIG.SCRIPT_URL}?r=${encodeURIComponent(code)}`);
+        const res = await response.json();
+
+        if (res.success && res.targetUrl) {
+          let dest = res.targetUrl.trim();
+          if (!dest.startsWith('http://') && !dest.startsWith('https://')) {
+            dest = 'https://' + dest;
+          }
+          document.getElementById("manualLink").href = dest;
+          document.getElementById("manualLink").classList.remove("hidden");
+          window.location.replace(dest);
+        } else {
+          alert("El enlace acortado no existe.");
+          window.location.href = baseUrl;
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error de conexión al procesar el enlace.");
+      }
+    }
+
+    async function apiRequest(payload) {
+      try {
+        const response = await fetch(CONFIG.SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, token: localStorage.getItem("admin_token") || "" })
+        });
+        const textData = await response.text();
+        return JSON.parse(textData);
+      } catch (error) {
+        console.error("Error de conexión:", error);
+        return { success: false, error: "No se pudo comunicar con Cloudflare KV." };
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const user = document.getElementById("userInput").value;
+      const pass = document.getElementById("passInput").value;
+
+      // La validación se hace en el Worker (la contraseña vive allí como secret)
+      const res = await apiRequest({ action: "login", user, pass });
+
+      if (res.success && res.token) {
+        localStorage.setItem("admin_token", res.token);
+        showAdminPanel();
+      } else {
+        document.getElementById("loginError").classList.remove("hidden");
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem("admin_token");
+      location.reload();
+    }
+
+    function showAdminPanel() {
+      document.getElementById("loginSection").classList.add("hidden");
+      document.getElementById("adminSection").classList.remove("hidden");
+      loadLinks();
+    }
+
+    async function loadLinks() {
+      const res = await apiRequest({ action: "list" });
+      if (res.unauthorized) { logout(); return; }
+      if (res.success) {
+        allLinksData = res.data;
+        document.getElementById("searchInput").value = "";
+        renderTable(allLinksData);
+      }
+    }
+
+    function renderTable(links) {
+      const tbody = document.getElementById("linksTableBody");
+      tbody.innerHTML = "";
+      document.getElementById("selectAll").checked = false;
+      updateSelectedCount();
+
+      if (links.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-gray-500">No se encontraron enlaces.</td></tr>`;
+        return;
+      }
+
+      links.forEach(link => {
+        const shortUrl = `${baseUrl}?r=${link.shortCode}`;
+        tbody.innerHTML += `
+          <tr class="border-b hover:bg-gray-50">
+            <td class="p-4 text-center">
+              <input type="checkbox" value="${link.id}" onclick="updateSelectedCount()" class="link-checkbox w-4 h-4 text-blue-600 rounded">
+            </td>
+            <td class="p-4 font-mono text-blue-600"><a href="${shortUrl}" target="_blank">${link.shortCode}</a></td>
+            <td class="p-4 truncate max-w-xs" title="${link.targetUrl}">${link.targetUrl}</td>
+            <td class="p-4 font-semibold">${link.clicks}</td>
+            <td class="p-4">${link.notes}</td>
+            <td class="p-4 space-x-2">
+              <button onclick="showQR('${shortUrl}', '${link.shortCode}')" class="bg-indigo-500 text-white px-3 py-1 rounded text-sm mb-1">Ver Plantilla QR</button>
+              <button onclick="downloadIntegratedTemplate('${shortUrl}', '${link.shortCode}')" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm">Descargar Plantilla</button>
+            </td>
+            <td class="p-4 space-x-2">
+              <button onclick="editLink('${link.id}', '${link.targetUrl}', '${link.notes}')" class="bg-yellow-500 text-white px-2 py-1 rounded text-sm">Editar</button>
+              <button onclick="deleteLink('${link.id}')" class="bg-red-500 text-white px-2 py-1 rounded text-sm">Eliminar</button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function filterLinks() {
+      const query = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = allLinksData.filter(link => 
+        link.shortCode.toLowerCase().includes(query) ||
+        link.targetUrl.toLowerCase().includes(query) ||
+        (link.notes && link.notes.toLowerCase().includes(query))
+      );
+      renderTable(filtered);
+    }
+
+    function toggleSelectAll(masterCheckbox) {
+      const checkboxes = document.querySelectorAll('.link-checkbox');
+      checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+      updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+      const selected = document.querySelectorAll('.link-checkbox:checked').length;
+      document.getElementById('selectedCount').innerText = `${selected} elemento(s) seleccionado(s)`;
+    }
+
+    async function deleteSelectedLinks() {
+      const checkboxes = document.querySelectorAll('.link-checkbox:checked');
+      if (checkboxes.length === 0) return alert("Selecciona al menos un enlace.");
+
+      if (confirm(`¿Eliminar los ${checkboxes.length} enlaces seleccionados?`)) {
+        for (const cb of checkboxes) {
+          await apiRequest({ action: "delete", id: cb.value });
+        }
+        loadLinks();
+      }
+    }
+
+    async function createLink(e) {
+      e.preventDefault();
+      const targetUrl = document.getElementById("targetUrl").value;
+      const shortCode = document.getElementById("shortCode").value;
+      const notes = document.getElementById("notes").value;
+
+      const res = await apiRequest({ action: "create", targetUrl, shortCode, notes });
+      if (res.success) {
+        document.getElementById("targetUrl").value = "";
+        document.getElementById("shortCode").value = "";
+        document.getElementById("notes").value = "";
+        loadLinks();
+      } else {
+        alert("Error: " + res.error);
+      }
+    }
+
+    async function editLink(id, currentUrl, currentNotes) {
+      const newUrl = prompt("Nueva URL Destino:", currentUrl);
+      const newNotes = prompt("Nuevas Notas:", currentNotes);
+      if (newUrl) {
+        await apiRequest({ action: "update", id, targetUrl: newUrl, notes: newNotes });
+        loadLinks();
+      }
+    }
+
+    async function deleteLink(id) {
+      if (confirm("¿Eliminar este enlace?")) {
+        await apiRequest({ action: "delete", id });
+        loadLinks();
+      }
+    }
+
+    function showQR(url, code) {
+      const container = document.getElementById("qrcode");
+      container.innerHTML = "";
+      
+      document.getElementById("modalShortCodeText").innerText = code;
+
+      new QRCode(container, { text: url, width: 350, height: 350 });
+      
+      const btnDownload = document.getElementById("templateDownloadBtn");
+      btnDownload.onclick = () => downloadIntegratedTemplate(url, code);
+      
+      document.getElementById("qrModal").classList.remove("hidden");
+    }
+
+    // =========================================================================
+    // EXPORTACIÓN USANDO COORDENADAS EXACTAS EN PÍXELES FIJOS 
+    // (Independientes del tamaño de pantalla o dispositivo)
+    // =========================================================================
+    function downloadIntegratedTemplate(url, code) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      const templateImg = new Image();
+      templateImg.crossOrigin = "anonymous";
+      templateImg.src = "boceto.fw.png";
+
+      templateImg.onload = () => {
+        // Obtenemos las dimensiones exactas de tu imagen original (ej. ancho y alto nativos)
+        const imgWidth = templateImg.naturalWidth || 1200;
+        const imgHeight = templateImg.naturalHeight || 1600;
+
+        canvas.width = imgWidth;
+        canvas.height = imgHeight;
+
+        // 1. Dibujar la plantilla base
+        ctx.drawImage(templateImg, 0, 0);
+
+        // 2. Generar QR temporalmente
+        const tempDiv = document.createElement("div");
+        document.body.appendChild(tempDiv);
+        new QRCode(tempDiv, { text: url, width: 500, height: 500 });
+
+        setTimeout(() => {
+          const qrCanvas = tempDiv.querySelector("canvas");
+          const qrImg = tempDiv.querySelector("img");
+
+          const proceedDrawing = (qrSource) => {
+            /* 
+              CONFIGURA AQUÍ TUS COORDENADAS FIJAS EN PÍXELES EXACTOS:
+              Cambia estos valores numéricos directamente según la posición real 
+              en píxeles de tu imagen "boceto.fw.png".
+            */
+            const qrSize = 296;                  // Tamaño fijo en píxeles del QR en la imagen final
+            const qrX = (imgWidth * 0.75) - (qrSize / 2);  // Coordenada X fija (ej. 63% del ancho real)
+            const qrY = (imgHeight * 0.71) - (qrSize / 2); // Coordenada Y fija (ej. 54% del alto real)
+
+            // Fondo blanco para el QR
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20);
+
+            // Dibujar QR en coordenadas fijas
+            ctx.drawImage(qrSource, qrX, qrY, qrSize, qrSize);
+
+            // 3. Dibujar el código corto en coordenadas fijas en píxeles
+            ctx.fillStyle = "#999999";
+            ctx.font = "bold 40px monospace";
+            ctx.textAlign = "center";
+            
+            const textX = imgWidth * 0.75;   // Coordenada X fija para el texto
+            const textY = imgHeight * 0.83;  // Coordenada Y fija para el texto (debajo del QR)
+            
+            ctx.fillText(code, textX, textY);
+
+            // 4. Descargar la imagen resultante
+            const pngUrl = canvas.toDataURL("image/png");
+            const downloadLink = document.createElement("a");
+            downloadLink.href = pngUrl;
+            downloadLink.download = `${code}.png`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            document.body.removeChild(tempDiv);
+          };
+
+          if (qrCanvas) {
+            proceedDrawing(qrCanvas);
+          } else if (qrImg) {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => proceedDrawing(img);
+            img.src = qrImg.src;
+          } else {
+            alert("No se pudo generar el código QR.");
+            document.body.removeChild(tempDiv);
+          }
+        }, 200);
+      };
+
+      templateImg.onerror = () => {
+        alert("No se pudo cargar la imagen 'boceto.fw.png'. Verifica que esté en la misma carpeta.");
+      };
+    }
+
+    function closeQrModal() {
+      document.getElementById("qrModal").classList.add("hidden");
+    }
+  </script>
+</body>
+</html>
