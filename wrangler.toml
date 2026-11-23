@@ -1,0 +1,21 @@
+# Configuración de despliegue del Worker "qrx"
+# (el nombre debe ser igual al actual para reemplazarlo: qrx.darwinco.workers.dev)
+name = "qrx"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# --- KV existente (tus datos anteriores). Solo se lee UNA vez para migrarlos. ---
+# Reemplaza el id por el de tu namespace "bd":  npx wrangler kv namespace list
+[[kv_namespaces]]
+binding = "bd"
+id = "PEGA_AQUI_EL_ID_DE_TU_KV"
+
+# --- Durable Object: fuente única de verdad (consistencia fuerte) ---
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "Registry"
+
+# Crea la clase con almacenamiento SQLite (disponible también en el plan gratuito)
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Registry"]

@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestor de Enlaces y Códigos QR</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <style>
+    .template-container {
+      position: relative;
+      display: inline-block;
+      max-width: 450px;
+      width: 100%;
+    }
+    .template-img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    /* 
+      POSICIONAMIENTO EN PANTALLA (Vista Previa del Modal)
+      Puedes ajustar estos valores si deseas mover visualmente los elementos en la previsualización.
+    */
+    #modalShortCodeText {
+      position: absolute;
+      top: 82%;   
+      left: 76%;  
+      transform: translate(-50%, -50%);
+      font-family: monospace;
+      font-weight: bold;
+      font-size: 14px;
+      color: #000;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    #modalQrBox {
+      position: absolute;
+      top: 69%;   
+      left: 72%;  
+      transform: translate(-50%, -50%);
+      width: 100px; 
+      height: 100px; 
+      background: white; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      z-index: 10;
+    }
+    .qr-download-btn {
+      position: absolute;
+      top: 100%;   
+      left: 50%;  
+      transform: translate(-50%, -50%);
+      z-index: 10;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- PANTALLA DE CARGA / REDIRECCIÓN PÚBLICA -->
+  <div id="redirectSection" class="hidden flex flex-col items-center justify-center min-h-screen">
+    <div class="p-8 bg-white rounded-lg shadow-md text-center max-w-sm w-full">
+      <img src="redirect.webp" alt="Redirigiendo..." class="w-28 h-28 mx-auto mb-4 object-contain">
+      <h2 class="text-xl font-bold text-gray-800 mb-2">Redireccionando...</h2>
+      <p class="text-gray-600 text-sm mb-4">Por favor espera un momento.</p>
+      <a id="manualLink" href="#" class="text-blue-600 underline text-xs hidden">Haz clic aquí si no redirige automáticamente</a>
+    </div>
+  </div>
+
+  <!-- VISTA DE LOGIN (administrador y usuarios) -->
+  <div id="loginSection" class="flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+      <h2 class="text-2xl font-bold mb-1 text-center text-gray-800">Gestor de Enlaces y Códigos QR</h2>
+      <p class="text-center text-gray-500 text-sm mb-6">Inicia sesión para continuar</p>
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Usuario</label>
+          <input type="text" id="userInput" required autocomplete="username" class="w-full mt-1 p-2 border rounded focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Contraseña</label>
+          <input type="password" id="passInput" required autocomplete="current-password" class="w-full mt-1 p-2 border rounded focus:ring-blue-500">
+        </div>
+        <p id="loginError" class="text-red-500 text-sm hidden"></p>
+        <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded font-semibold hover:bg-blue-700">Ingresar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- PANEL DEL ADMINISTRADOR                                                -->
+  <!-- ===================================================================== -->
+  <div id="adminSection" class="hidden container mx-auto p-6">
+    <div class="flex justify-between items-center mb-6">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-800">Administración de Enlaces y Códigos QR</h1>
+        <p class="text-sm text-gray-500 mt-1">Sesión: <span class="session-name font-semibold"></span> · Administrador</p>
+      </div>
+      <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Cerrar Sesión</button>
+    </div>
+
+    <!-- PESTAÑAS -->
+    <div class="flex gap-2 mb-6 border-b">
+      <button id="tabBtnLinks" onclick="switchTab('links')" class="px-4 py-2 font-semibold border-b-2 border-blue-600 text-blue-600">Enlaces</button>
+      <button id="tabBtnUsers" onclick="switchTab('users')" class="px-4 py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">Usuarios</button>
+    </div>
+
+    <!-- PESTAÑA ENLACES -->
+    <div id="tabLinks">
+      <!-- FORMULARIO CREAR ENLACE -->
+      <div class="bg-white p-6 rounded-lg shadow mb-8">
+        <h3 class="text-lg font-semibold mb-4">Crear Nuevo Enlace y QR</h3>
+        <form onsubmit="createLink(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <input type="url" id="targetUrl" placeholder="URL Destino (https://...)" required class="p-2 border rounded">
+          <input type="text" id="shortCode" placeholder="Código corto (Opcional)" class="p-2 border rounded">
+          <input type="text" id="notes" maxlength="150" placeholder="Notas o Descripción" class="p-2 border rounded">
+          <button type="submit" class="md:col-span-3 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Guardar y Generar</button>
+        </form>
+      </div>
+
+      <!-- IMPORTAR ENLACES DESDE CSV -->
+      <div class="bg-white p-6 rounded-lg shadow mb-8">
+        <div class="flex flex-wrap justify-between items-center mb-2 gap-3">
+          <h3 class="text-lg font-semibold">Importar enlaces desde CSV</h3>
+          <button type="button" onclick="downloadCsvTemplate()" class="bg-gray-200 text-gray-800 px-3 py-1.5 rounded text-sm font-semibold hover:bg-gray-300">📄 Descargar plantilla CSV</button>
+        </div>
+        <p class="text-sm text-gray-500 mb-4">
+          Columnas: <b>url</b> (obligatoria), <b>codigo</b> (opcional; si falta se genera uno) y <b>notas</b> (opcional).
+          Acepta separador coma o punto y coma. Máximo 2000 filas.
+        </p>
+        <div class="flex flex-wrap gap-3 items-center">
+          <input type="file" id="csvFile" accept=".csv,text/csv,text/plain" onchange="handleCsvFile(this)" class="text-sm">
+          <button type="button" id="csvImportBtn" onclick="importCsv()" disabled class="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 text-sm disabled:opacity-40 disabled:cursor-not-allowed">Importar</button>
+        </div>
+        <div id="csvPreview" class="hidden mt-4"></div>
+        <div id="csvResult" class="hidden mt-4"></div>
+      </div>
+
+      <!-- CONTROLES, BOTÓN ACTUALIZAR Y BUSCADOR -->
+      <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+        <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <button onclick="deleteSelectedLinks()" class="bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700 text-sm shadow">Eliminar Seleccionados</button>
+          <button onclick="setActiveSelected(true)" class="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 text-sm shadow">Activar Seleccionados</button>
+          <button onclick="setActiveSelected(false)" class="bg-gray-600 text-white px-4 py-2 rounded font-semibold hover:bg-gray-700 text-sm shadow">Desactivar Seleccionados</button>
+          <button onclick="loadLinks()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow flex items-center gap-1">
+            🔄 Actualizar
+          </button>
+          <span id="selectedCount" class="text-gray-600 text-sm">0 elementos seleccionados</span>
+        </div>
+        <div class="w-full md:w-72">
+          <input type="text" id="searchInput" oninput="filterLinks()" placeholder="🔍 Buscar por código, URL, notas o usuario..." class="w-full p-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500">
+        </div>
+      </div>
+
+      <!-- TABLA DE GESTIÓN -->
+      <div class="bg-white rounded-lg shadow overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-gray-50 border-b">
+              <th class="p-4 w-12 text-center">
+                <input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)" class="w-4 h-4 text-blue-600 rounded">
+              </th>
+              <th class="p-4">Código Corto</th>
+              <th class="p-4">URL Destino</th>
+              <th class="p-4">Estado</th>
+              <th class="p-4">Propietario</th>
+              <th class="p-4">Clics</th>
+              <th class="p-4">Notas</th>
+              <th class="p-4">QR / Descarga</th>
+              <th class="p-4">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="linksTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PESTAÑA USUARIOS -->
+    <div id="tabUsers" class="hidden">
+      <div class="bg-white p-6 rounded-lg shadow mb-8">
+        <h3 class="text-lg font-semibold mb-4">Crear Cuenta de Usuario</h3>
+        <form onsubmit="createUser(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <input type="text" id="newUsername" placeholder="Usuario (3-32: a-z, 0-9, . _ -)" required minlength="3" maxlength="32" autocomplete="off" class="p-2 border rounded">
+          <div class="flex gap-2">
+            <input type="password" id="newUserPass" placeholder="Contraseña (mínimo 8 caracteres)" required minlength="8" maxlength="128" autocomplete="new-password" class="flex-1 p-2 border rounded">
+            <button type="button" onclick="generatePassword('newUserPass')" title="Generar contraseña segura" class="bg-gray-200 px-3 rounded hover:bg-gray-300">🎲</button>
+          </div>
+          <button type="submit" class="bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Crear Usuario</button>
+        </form>
+      </div>
+
+      <div class="flex items-center mb-4 gap-3">
+        <button onclick="loadUsers()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow">🔄 Actualizar</button>
+      </div>
+
+      <div class="bg-white rounded-lg shadow overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-gray-50 border-b">
+              <th class="p-4">Usuario</th>
+              <th class="p-4">Enlaces asociados</th>
+              <th class="p-4">Creado</th>
+              <th class="p-4">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- PANEL DEL USUARIO                                                      -->
+  <!-- ===================================================================== -->
+  <div id="userSection" class="hidden container mx-auto p-6">
+    <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-800">Mis Enlaces y Códigos QR</h1>
+        <p class="text-sm text-gray-500 mt-1">Sesión: <span class="session-name font-semibold"></span></p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="openPwdModal(null)" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">Cambiar contraseña</button>
+        <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Cerrar Sesión</button>
+      </div>
+    </div>
+
+    <!-- ENLACES DISPONIBLES PARA RECLAMAR -->
+    <div class="bg-white p-6 rounded-lg shadow mb-8">
+      <div class="flex flex-wrap justify-between items-center mb-4 gap-3">
+        <div>
+          <h3 class="text-lg font-semibold">Enlaces disponibles para reclamar</h3>
+          <p class="text-sm text-gray-500">Reclama un enlace activo para asociarlo a tu cuenta. Después podrás cambiar su URL destino.</p>
+        </div>
+        <button onclick="loadUserData()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow">🔄 Actualizar</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-gray-50 border-b">
+              <th class="p-4">Código Corto</th>
+              <th class="p-4">Notas</th>
+              <th class="p-4">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="availableTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MIS ENLACES -->
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <div class="p-6 pb-2"><h3 class="text-lg font-semibold">Mis enlaces</h3></div>
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-gray-50 border-b">
+            <th class="p-4">Código Corto</th>
+            <th class="p-4">URL Destino</th>
+            <th class="p-4">Estado</th>
+            <th class="p-4">Clics</th>
+            <th class="p-4">Notas</th>
+            <th class="p-4">QR / Descarga</th>
+            <th class="p-4">Acción</th>
+          </tr>
+        </thead>
+        <tbody id="myLinksTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MODAL CONTRASEÑA -->
+  <div id="pwdModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+    <div class="bg-white p-6 rounded-lg max-w-sm w-full">
+      <h3 id="pwdModalTitle" class="text-lg font-bold mb-2"></h3>
+      <p id="pwdForcedNote" class="hidden text-sm text-gray-600 mb-3">
+        Tu contraseña es temporal. Por seguridad, debes elegir una nueva antes de usar el sistema.
+      </p>
+      <form onsubmit="submitPwdModal(event)" class="space-y-3">
+        <input type="password" id="pwdCurrent" placeholder="Contraseña actual" autocomplete="current-password" class="w-full p-2 border rounded">
+        <div class="flex gap-2">
+          <input type="password" id="pwdNew" placeholder="Nueva contraseña (mínimo 8 caracteres)" required minlength="8" maxlength="128" autocomplete="new-password" class="flex-1 p-2 border rounded">
+          <button type="button" id="pwdGenBtn" onclick="generatePassword('pwdNew')" title="Generar contraseña segura" class="hidden bg-gray-200 px-3 rounded hover:bg-gray-300">🎲</button>
+        </div>
+        <p id="pwdError" class="text-red-500 text-sm hidden"></p>
+        <div class="flex gap-2">
+          <button type="submit" class="flex-1 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Guardar</button>
+          <button type="button" id="pwdCancelBtn" onclick="closePwdModal()" class="flex-1 bg-gray-500 text-white py-2 rounded font-semibold">Cancelar</button>
+        </div>
+        <button type="button" id="pwdLogoutBtn" onclick="logout()" class="hidden w-full text-sm text-gray-500 underline">Cerrar sesión</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CREDENCIALES (compartir por WhatsApp) -->
+  <div id="credModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+    <div class="bg-white p-6 rounded-lg max-w-md w-full">
+      <h3 class="text-lg font-bold mb-1">Credenciales de acceso</h3>
+      <p class="text-sm text-gray-500 mb-2">La contraseña solo se muestra ahora. Después no se puede consultar, únicamente restablecer.</p>
+      <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-4">🔒 Es una contraseña temporal: el usuario deberá cambiarla en su primer inicio de sesión.</p>
+      <div class="bg-gray-50 border rounded p-3 text-sm font-mono space-y-1 mb-4 break-all">
+        <div>Usuario: <b id="credUser"></b></div>
+        <div>Contraseña: <b id="credPass"></b></div>
+        <div>Panel: <span id="credUrl"></span></div>
+      </div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Celular del usuario (opcional)</label>
+      <input type="tel" id="credPhone" placeholder="Ej. 3001234567 o 573001234567" class="w-full p-2 border rounded mb-1">
+      <p class="text-xs text-gray-500 mb-4">Si lo dejas vacío, WhatsApp te deja elegir el contacto. Con 10 dígitos que empiecen en 3 se agrega el indicativo 57 (Colombia).</p>
+      <div class="flex flex-col gap-2">
+        <button type="button" onclick="shareWhatsApp()" class="bg-green-500 text-white py-2 rounded font-semibold hover:bg-green-600">💬 Compartir por WhatsApp</button>
+        <button type="button" onclick="copyCredentials()" class="bg-gray-200 text-gray-800 py-2 rounded font-semibold hover:bg-gray-300">📋 Copiar datos</button>
+        <button type="button" onclick="closeCredModal()" class="bg-gray-500 text-white py-2 rounded font-semibold">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MOSTRAR QR CON PLANTILLA INTEGRADA -->
+  <div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+    <div class="bg-white p-6 rounded-lg text-center max-w-lg w-full relative">
+      <h3 class="text-lg font-bold mb-4">Vista Previa de Plantilla con QR</h3>
+      
+      <div class="template-container mx-auto mb-4 shadow border rounded">
+        <img src="boceto.fw.png" alt="Plantilla Boceto" class="template-img">
+        
+        <div id="modalShortCodeText"></div>
+
+        <div id="modalQrBox">
+          <div id="qrcode"></div>
+        </div>
+
+        <button id="templateDownloadBtn" class="qr-download-btn bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow-lg hover:bg-emerald-700 transition">
+          📥 Descargar Plantilla Completa
+        </button>
+      </div>
+
+      <button onclick="closeQrModal()" class="bg-gray-500 text-white px-4 py-2 rounded w-full font-semibold">Cerrar</button>
+    </div>
+  </div>
+
+  <script>
+    const baseUrl = window.location.href.split('?')[0];
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectCode = urlParams.get('r');
+
+    let allLinksData = [];
+    let allUsersData = [];
+    let myLinksData = [];
+    let tempPassword = null; // contraseña temporal escrita en el login (solo memoria)
+    let pwdTarget = null; // null = mi propia contraseña; texto = usuario (acción del administrador)
+
+    // Escapa texto antes de insertarlo en el HTML (evita inyección de código)
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, c => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]
+      ));
+    }
+
+    const getRole = () => localStorage.getItem("auth_role");
+
+    window.onload = () => {
+      localStorage.removeItem("admin_token"); // sesión del formato anterior
+      if (redirectCode) {
+        handleRedirect(redirectCode);
+      } else if (localStorage.getItem("auth_token")) {
+        showPanel();
+      }
+    };
+
+    async function handleRedirect(code) {
+      document.getElementById("loginSection").classList.add("hidden");
+      document.getElementById("redirectSection").classList.remove("hidden");
+
+      try {
+        const response = await fetch(`${CONFIG.SCRIPT_URL}?r=${encodeURIComponent(code)}`);
+        const res = await response.json();
+
+        if (res.success && res.targetUrl) {
+          let dest = res.targetUrl.trim();
+          if (!dest.startsWith('http://') && !dest.startsWith('https://')) {
+            dest = 'https://' + dest;
+          }
+          document.getElementById("manualLink").href = dest;
+          document.getElementById("manualLink").classList.remove("hidden");
+          window.location.replace(dest);
+        } else {
+          alert(res.error || "El enlace acortado no existe.");
+          window.location.href = baseUrl;
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error de conexión al procesar el enlace.");
+      }
+    }
+
+    async function apiRequest(payload) {
+      try {
+        const response = await fetch(CONFIG.SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, token: localStorage.getItem("auth_token") || "" })
+        });
+        const textData = await response.text();
+        return JSON.parse(textData);
+      } catch (error) {
+        console.error("Error de conexión:", error);
+        return { success: false, error: "No se pudo comunicar con Cloudflare KV." };
+      }
+    }
+
+    // Si la sesión venció o fue invalidada, vuelve al login
+    function checkAuth(res) {
+      if (res && res.unauthorized) { logout(); return true; }
+      if (res && res.mustChange) { forcePasswordChange(); return true; }
+      return false;
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const user = document.getElementById("userInput").value;
+      const pass = document.getElementById("passInput").value;
+
+      // La validación se hace en el Worker (las contraseñas nunca viven en el navegador)
+      const res = await apiRequest({ action: "login", user, pass });
+
+      if (res.success && res.token) {
+        localStorage.setItem("auth_token", res.token);
+        localStorage.setItem("auth_role", res.role);
+        localStorage.setItem("auth_user", res.username);
+        if (res.mustChange) {
+          localStorage.setItem("auth_must_change", "1");
+          tempPassword = pass; // solo en memoria, para no pedirla dos veces
+        } else {
+          localStorage.removeItem("auth_must_change");
+        }
+        document.getElementById("passInput").value = "";
+        document.getElementById("loginError").classList.add("hidden");
+        showPanel();
+      } else {
+        const err = document.getElementById("loginError");
+        err.textContent = res.error || "Usuario o contraseña incorrectos";
+        err.classList.remove("hidden");
+      }
+    }
+
+    function logout() {
+      ["auth_token", "auth_role", "auth_user", "auth_must_change"].forEach(k => localStorage.removeItem(k));
+      tempPassword = null;
+      location.reload();
+    }
+
+    function showPanel() {
+      document.getElementById("loginSection").classList.add("hidden");
+      document.querySelectorAll(".session-name").forEach(el => {
+        el.textContent = localStorage.getItem("auth_user") || "";
+      });
+
+      if (getRole() === "admin") {
+        document.getElementById("adminSection").classList.remove("hidden");
+        runMigration().then(ok => { if (ok) loadLinks(); });
+      } else if (localStorage.getItem("auth_must_change") === "1") {
+        forcePasswordChange();
+      } else {
+        showUserPanel();
+      }
+    }
+
+    function showUserPanel() {
+      document.getElementById("userSection").classList.remove("hidden");
+      loadUserData();
+    }
+
+    // Cambio obligatorio: el panel queda oculto y el diálogo no se puede cerrar
+    function forcePasswordChange() {
+      document.getElementById("userSection").classList.add("hidden");
+      localStorage.setItem("auth_must_change", "1");
+      openPwdModal(null, true);
+    }
+
+    // Traslada (una sola vez) los datos anteriores de KV al Durable Object.
+    // Es automático y por lotes; si ya se migró, responde "done" de inmediato.
+    async function runMigration() {
+      for (let i = 0; i < 100; i++) {
+        const res = await apiRequest({ action: "migrate" });
+        if (checkAuth(res)) return false;
+        if (!res.success || res.done) break;
+      }
+      return true;
+    }
+
+    // =========================================================================
+    // ADMINISTRADOR: ENLACES
+    // =========================================================================
+    function switchTab(name) {
+      const isLinks = name === "links";
+      document.getElementById("tabLinks").classList.toggle("hidden", !isLinks);
+      document.getElementById("tabUsers").classList.toggle("hidden", isLinks);
+
+      const on = ["border-blue-600", "text-blue-600"];
+      const off = ["border-transparent", "text-gray-500", "hover:text-gray-700"];
+      const btnLinks = document.getElementById("tabBtnLinks");
+      const btnUsers = document.getElementById("tabBtnUsers");
+      btnLinks.classList.remove(...(isLinks ? off : on)); btnLinks.classList.add(...(isLinks ? on : off));
+      btnUsers.classList.remove(...(isLinks ? on : off)); btnUsers.classList.add(...(isLinks ? off : on));
+
+      if (isLinks) loadLinks(); else loadUsers();
+    }
+
+    async function loadLinks() {
+      const res = await apiRequest({ action: "list" });
+      if (checkAuth(res)) return;
+      if (res.success) {
+        allLinksData = res.data;
+        document.getElementById("searchInput").value = "";
+        renderTable(allLinksData);
+      } else {
+        alert("Error: " + res.error);
+      }
+    }
+
+    function statusBadge(active) {
+      return active
+        ? '<span class="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700">Activo</span>'
+        : '<span class="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700">Inactivo</span>';
+    }
+
+    function qrButtons(shortUrl, code) {
+      return `
+        <button data-url="${esc(shortUrl)}" data-code="${esc(code)}" onclick="showQR(this.dataset.url, this.dataset.code)" class="bg-indigo-500 text-white px-3 py-1 rounded text-sm mb-1">Ver Plantilla QR</button>
+        <button data-url="${esc(shortUrl)}" data-code="${esc(code)}" onclick="downloadIntegratedTemplate(this.dataset.url, this.dataset.code)" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm">Descargar Plantilla</button>`;
+    }
+
+    function renderTable(links) {
+      const tbody = document.getElementById("linksTableBody");
+      document.getElementById("selectAll").checked = false;
+
+      if (links.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-gray-500">No se encontraron enlaces.</td></tr>`;
+        updateSelectedCount();
+        return;
+      }
+
+      tbody.innerHTML = links.map(link => {
+        const shortUrl = `${baseUrl}?r=${encodeURIComponent(link.shortCode)}`;
+        const owner = link.owner
+          ? `<span class="font-semibold">${esc(link.owner)}</span>`
+          : '<span class="text-gray-400">Sin asignar</span>';
+        return `
+          <tr class="border-b hover:bg-gray-50">
+            <td class="p-4 text-center">
+              <input type="checkbox" value="${esc(link.id)}" onclick="updateSelectedCount()" class="link-checkbox w-4 h-4 text-blue-600 rounded">
+            </td>
+            <td class="p-4 font-mono text-blue-600"><a href="${esc(shortUrl)}" target="_blank" rel="noopener">${esc(link.shortCode)}</a></td>
+            <td class="p-4 truncate max-w-xs" title="${esc(link.targetUrl)}">${esc(link.targetUrl)}</td>
+            <td class="p-4">${statusBadge(link.active)}</td>
+            <td class="p-4">${owner}</td>
+            <td class="p-4 font-semibold">${esc(link.clicks)}</td>
+            <td class="p-4">${esc(link.notes)}</td>
+            <td class="p-4 space-x-2">${qrButtons(shortUrl, link.shortCode)}</td>
+            <td class="p-4 space-x-1 whitespace-nowrap">
+              <button data-id="${esc(link.id)}" onclick="editLink(this.dataset.id)" class="bg-yellow-500 text-white px-2 py-1 rounded text-sm">Editar</button>
+              <button data-id="${esc(link.id)}" onclick="toggleActive(this.dataset.id)" class="${link.active ? "bg-gray-600" : "bg-green-600"} text-white px-2 py-1 rounded text-sm">${link.active ? "Desactivar" : "Activar"}</button>
+              <button data-id="${esc(link.id)}" onclick="assignOwner(this.dataset.id)" class="bg-blue-500 text-white px-2 py-1 rounded text-sm">Propietario</button>
+              <button data-id="${esc(link.id)}" onclick="deleteLink(this.dataset.id)" class="bg-red-500 text-white px-2 py-1 rounded text-sm">Eliminar</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+      updateSelectedCount();
+    }
+
+    function filterLinks() {
+      const query = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = allLinksData.filter(link =>
+        link.shortCode.toLowerCase().includes(query) ||
+        link.targetUrl.toLowerCase().includes(query) ||
+        (link.notes && link.notes.toLowerCase().includes(query)) ||
+        (link.owner && link.owner.toLowerCase().includes(query))
+      );
+      renderTable(filtered);
+    }
+
+    function toggleSelectAll(masterCheckbox) {
+      const checkboxes = document.querySelectorAll('.link-checkbox');
+      checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+      updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+      const selected = document.querySelectorAll('.link-checkbox:checked').length;
+      document.getElementById('selectedCount').innerText = `${selected} elemento(s) seleccionado(s)`;
+    }
+
+    async function deleteSelectedLinks() {
+      const checkboxes = document.querySelectorAll('.link-checkbox:checked');
+      if (checkboxes.length === 0) return alert("Selecciona al menos un enlace.");
+
+      if (confirm(`¿Eliminar los ${checkboxes.length} enlaces seleccionados?`)) {
+        for (const cb of checkboxes) {
+          await apiRequest({ action: "delete", id: cb.value });
+        }
+        loadLinks();
+      }
+    }
+
+    async function setActiveSelected(active) {
+      const checkboxes = document.querySelectorAll('.link-checkbox:checked');
+      if (checkboxes.length === 0) return alert("Selecciona al menos un enlace.");
+
+      for (const cb of checkboxes) {
+        await apiRequest({ action: "set_active", id: cb.value, active });
+      }
+      loadLinks();
+    }
+
+    async function createLink(e) {
+      e.preventDefault();
+      const targetUrl = document.getElementById("targetUrl").value;
+      const shortCode = document.getElementById("shortCode").value;
+      const notes = document.getElementById("notes").value;
+
+      const res = await apiRequest({ action: "create", targetUrl, shortCode, notes });
+      if (checkAuth(res)) return;
+      if (res.success) {
+        document.getElementById("targetUrl").value = "";
+        document.getElementById("shortCode").value = "";
+        document.getElementById("notes").value = "";
+        loadLinks();
+      } else {
+        alert("Error: " + res.error);
+      }
+    }
+
+    async function editLink(id) {
+      const link = allLinksData.find(l => l.id === id);
+      if (!link) return;
+      const newUrl = prompt("Nueva URL Destino:", link.targetUrl);
+      if (newUrl === null) return;
+      let newNotes = prompt("Nuevas Notas:", link.notes);
+      if (newNotes === null) newNotes = link.notes;
+      if (newUrl) {
+        const res = await apiRequest({ action: "update", id, targetUrl: newUrl, notes: newNotes });
+        if (checkAuth(res)) return;
+        if (!res.success) alert("Error: " + res.error);
+        loadLinks();
+      }
+    }
+
+    async function toggleActive(id) {
+      const link = allLinksData.find(l => l.id === id);
+      if (!link) return;
+      const res = await apiRequest({ action: "set_active", id, active: !link.active });
+      if (checkAuth(res)) return;
+      if (!res.success) alert("Error: " + res.error);
+      loadLinks();
+    }
+
+    async function assignOwner(id) {
+      const link = allLinksData.find(l => l.id === id);
+      if (!link) return;
+      const owner = prompt(
+        `Propietario del enlace "${link.shortCode}".\nEscribe el nombre de usuario, o déjalo vacío para liberarlo (quedará disponible para reclamar):`,
+        link.owner || ""
+      );
+      if (owner === null) return;
+      const res = await apiRequest({ action: "set_owner", id, owner });
+      if (checkAuth(res)) return;
+      if (!res.success) alert("Error: " + res.error);
+      loadLinks();
+    }
+
+    async function deleteLink(id) {
+      if (confirm("¿Eliminar este enlace?")) {
+        const res = await apiRequest({ action: "delete", id });
+        if (checkAuth(res)) return;
+        loadLinks();
+      }
+    }
+
+    // =========================================================================
+    // ADMINISTRADOR: USUARIOS
+    // =========================================================================
+    async function loadUsers() {
+      const res = await apiRequest({ action: "users_list" });
+      if (checkAuth(res)) return;
+      if (!res.success) return alert("Error: " + res.error);
+
+      allUsersData = res.data;
+      const tbody = document.getElementById("usersTableBody");
+      if (allUsersData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-gray-500">Aún no hay usuarios. Crea el primero arriba.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = allUsersData.map(u => `
+        <tr class="border-b hover:bg-gray-50">
+          <td class="p-4 font-semibold">${esc(u.username)}${u.mustChange ? ' <span class="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700" title="Aún no ha cambiado su contraseña temporal">Contraseña temporal</span>' : ""}</td>
+          <td class="p-4">${esc(u.links)}</td>
+          <td class="p-4 text-sm text-gray-600">${u.createdAt ? esc(new Date(u.createdAt).toLocaleString()) : "—"}</td>
+          <td class="p-4 space-x-2 whitespace-nowrap">
+            <button data-user="${esc(u.username)}" onclick="openPwdModal(this.dataset.user)" class="bg-yellow-500 text-white px-2 py-1 rounded text-sm">Cambiar contraseña</button>
+            <button data-user="${esc(u.username)}" onclick="deleteUser(this.dataset.user)" class="bg-red-500 text-white px-2 py-1 rounded text-sm">Eliminar</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    async function createUser(e) {
+      e.preventDefault();
+      const username = document.getElementById("newUsername").value;
+      const password = document.getElementById("newUserPass").value;
+
+      const res = await apiRequest({ action: "user_create", username, password });
+      if (checkAuth(res)) return;
+      if (res.success) {
+        document.getElementById("newUsername").value = "";
+        const passInput = document.getElementById("newUserPass");
+        passInput.value = "";
+        passInput.type = "password";
+        loadUsers();
+        openCredModal(res.username || username.trim().toLowerCase(), password);
+      } else {
+        alert("Error: " + res.error);
+      }
+    }
+
+    async function deleteUser(username) {
+      const u = allUsersData.find(x => x.username === username);
+      const extra = u && u.links > 0 ? `\nSus ${u.links} enlace(s) quedarán libres para que otros los reclamen.` : "";
+      if (!confirm(`¿Eliminar al usuario "${username}"?${extra}`)) return;
+
+      const res = await apiRequest({ action: "user_delete", username });
+      if (checkAuth(res)) return;
+      if (!res.success) alert("Error: " + res.error);
+      loadUsers();
+    }
+
+    // =========================================================================
+    // CONTRASEÑAS (modal compartido: usuario cambia la suya / admin cambia otra)
+    // =========================================================================
+    function openPwdModal(target, forced = false) {
+      pwdTarget = target;
+      document.getElementById("pwdModalTitle").textContent = forced
+        ? "Crea tu nueva contraseña"
+        : (target ? `Nueva contraseña para "${target}"` : "Cambiar mi contraseña");
+      document.getElementById("pwdForcedNote").classList.toggle("hidden", !forced);
+      document.getElementById("pwdCancelBtn").classList.toggle("hidden", forced);
+      document.getElementById("pwdLogoutBtn").classList.toggle("hidden", !forced);
+      const current = document.getElementById("pwdCurrent");
+      current.classList.toggle("hidden", !!target);
+      current.required = !target;
+      current.value = forced && tempPassword ? tempPassword : "";
+      const pwdNew = document.getElementById("pwdNew");
+      pwdNew.value = "";
+      pwdNew.type = "password";
+      document.getElementById("pwdGenBtn").classList.toggle("hidden", !target);
+      document.getElementById("pwdError").classList.add("hidden");
+      document.getElementById("pwdModal").classList.remove("hidden");
+    }
+
+    function closePwdModal() {
+      document.getElementById("pwdModal").classList.add("hidden");
+    }
+
+    async function submitPwdModal(e) {
+      e.preventDefault();
+      const password = document.getElementById("pwdNew").value;
+      if (!pwdTarget && password === document.getElementById("pwdCurrent").value) {
+        const err = document.getElementById("pwdError");
+        err.textContent = "La nueva contraseña debe ser diferente a la actual.";
+        err.classList.remove("hidden");
+        return;
+      }
+      const res = pwdTarget
+        ? await apiRequest({ action: "user_password", username: pwdTarget, password })
+        : await apiRequest({ action: "change_password", current: document.getElementById("pwdCurrent").value, password });
+
+      if (checkAuth(res)) return;
+      if (res.success) {
+        if (res.token) localStorage.setItem("auth_token", res.token);
+        const wasForced = localStorage.getItem("auth_must_change") === "1";
+        closePwdModal();
+        if (pwdTarget) {
+          openCredModal(pwdTarget, password); // el admin puede compartir la nueva contraseña
+        } else {
+          localStorage.removeItem("auth_must_change");
+          tempPassword = null;
+          alert("Contraseña actualizada.");
+          if (wasForced) showUserPanel();
+        }
+      } else {
+        const err = document.getElementById("pwdError");
+        err.textContent = res.error || "No se pudo actualizar la contraseña.";
+        err.classList.remove("hidden");
+      }
+    }
+
+    // =========================================================================
+    // USUARIO: RECLAMAR Y GESTIONAR SUS ENLACES
+    // =========================================================================
+    async function loadUserData() {
+      const [avail, mine] = await Promise.all([
+        apiRequest({ action: "available" }),
+        apiRequest({ action: "my_links" })
+      ]);
+      if (checkAuth(avail) || checkAuth(mine)) return;
+      if (!avail.success) alert("Error: " + avail.error);
+      if (!mine.success) alert("Error: " + mine.error);
+      if (avail.success) renderAvailable(avail.data);
+      if (mine.success) renderMyLinks(mine.data);
+    }
+
+    function renderAvailable(list) {
+      const tbody = document.getElementById("availableTableBody");
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="p-6 text-center text-gray-500">No hay enlaces disponibles por ahora.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = list.map(l => `
+        <tr class="border-b hover:bg-gray-50">
+          <td class="p-4 font-mono text-blue-600">${esc(l.shortCode)}</td>
+          <td class="p-4">${esc(l.notes)}</td>
+          <td class="p-4">
+            <button data-id="${esc(l.id)}" onclick="claimLink(this.dataset.id)" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">Reclamar</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    function renderMyLinks(list) {
+      const tbody = document.getElementById("myLinksTableBody");
+      myLinksData = list;
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-gray-500">Aún no tienes enlaces. Reclama uno de la lista de arriba.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = list.map(link => {
+        const shortUrl = `${baseUrl}?r=${encodeURIComponent(link.shortCode)}`;
+        return `
+          <tr class="border-b hover:bg-gray-50">
+            <td class="p-4 font-mono text-blue-600"><a href="${esc(shortUrl)}" target="_blank" rel="noopener">${esc(link.shortCode)}</a></td>
+            <td class="p-4 truncate max-w-xs" title="${esc(link.targetUrl)}">${esc(link.targetUrl)}</td>
+            <td class="p-4">${statusBadge(link.active)}</td>
+            <td class="p-4 font-semibold">${esc(link.clicks)}</td>
+            <td class="p-4">${esc(link.notes)}</td>
+            <td class="p-4 space-x-2">${qrButtons(shortUrl, link.shortCode)}</td>
+            <td class="p-4 whitespace-nowrap">
+              <button data-id="${esc(link.id)}" onclick="editMyUrl(this.dataset.id)" class="bg-yellow-500 text-white px-2 py-1 rounded text-sm">Editar destino</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    async function claimLink(id) {
+      if (!confirm(`¿Reclamar el enlace "${id}"? Quedará asociado a tu cuenta.`)) return;
+      const res = await apiRequest({ action: "claim", id });
+      if (checkAuth(res)) return;
+      if (!res.success) alert("Error: " + res.error);
+      loadUserData();
+    }
+
+    async function editMyUrl(id) {
+      const link = myLinksData.find(l => l.id === id);
+      if (!link) return;
+      const newUrl = prompt("Nueva URL Destino:", link.targetUrl);
+      if (!newUrl) return;
+      const res = await apiRequest({ action: "update_url", id, targetUrl: newUrl });
+      if (checkAuth(res)) return;
+      if (!res.success) alert("Error: " + res.error);
+      loadUserData();
+    }
+
+    // =========================================================================
+    // IMPORTACIÓN MASIVA DESDE CSV
+    // =========================================================================
+    const MAX_CSV_ROWS = 2000;
+    const CSV_CHUNK = 100;
+    let csvRows = [];       // [{ line, targetUrl, shortCode, notes }]
+    let csvLastRows = {};   // line -> fila (para el archivo de errores)
+    let csvLastFailed = [];
+
+    const CSV_HEADERS = {
+      url: "targetUrl", destino: "targetUrl", urldestino: "targetUrl", targeturl: "targetUrl",
+      enlace: "targetUrl", link: "targetUrl", direccion: "targetUrl",
+      codigo: "shortCode", code: "shortCode", shortcode: "shortCode", codigocorto: "shortCode",
+      corto: "shortCode", alias: "shortCode",
+      notas: "notes", nota: "notes", notes: "notes", descripcion: "notes",
+      comentario: "notes", comentarios: "notes"
+    };
+
+    function normHeader(h) {
+      return String(h || "").toLowerCase().normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    }
+
+    // Lector CSV: comillas, comillas escapadas (""), saltos de línea dentro de comillas,
+    // BOM y separador automático (coma, punto y coma o tabulador).
+    function parseCSV(text) {
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      const firstLine = text.split(/\r?\n/, 1)[0];
+      const count = ch => (firstLine.match(new RegExp(ch === "\t" ? "\t" : "\\" + ch, "g")) || []).length;
+      const delim = [";", ",", "\t"].sort((a, b) => count(b) - count(a))[0];
+
+      const rows = [];
+      let row = [], field = "", inQ = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false;
+          } else field += c;
+        } else if (c === '"') {
+          inQ = true;
+        } else if (c === delim) {
+          row.push(field); field = "";
+        } else if (c === "\n" || c === "\r") {
+          if (c === "\r" && text[i + 1] === "\n") i++;
+          row.push(field); rows.push(row); row = []; field = "";
+        } else field += c;
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+
+      // line = número de fila en el archivo (como lo ve el usuario en Excel)
+      return rows
+        .map((cells, i) => ({ cells: cells.map(c => c.trim()), line: i + 1 }))
+        .filter(r => r.cells.some(c => c !== ""));
+    }
+
+    function csvToRows(parsed) {
+      if (parsed.length === 0) return [];
+      const map = {};
+      parsed[0].cells.forEach((h, i) => {
+        const field = CSV_HEADERS[normHeader(h)];
+        if (field && map[field] === undefined) map[field] = i;
+      });
+      const hasHeader = map.targetUrl !== undefined;
+      const cols = hasHeader ? map : { targetUrl: 0, shortCode: 1, notes: 2 };
+      const data = hasHeader ? parsed.slice(1) : parsed;
+      const get = (cells, idx) => (idx === undefined ? "" : (cells[idx] || ""));
+      return data.map(r => ({
+        line: r.line,
+        targetUrl: get(r.cells, cols.targetUrl),
+        shortCode: get(r.cells, cols.shortCode),
+        notes: get(r.cells, cols.notes)
+      }));
+    }
+
+    function handleCsvFile(input) {
+      const file = input.files[0];
+      resetCsvUi(false);
+      if (!file) return;
+      if (file.size > 1024 * 1024) {
+        alert("El archivo es demasiado grande (máximo 1 MB).");
+        input.value = "";
+        return;
+      }
+      const read = encoding => new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = reject;
+        fr.readAsText(file, encoding);
+      });
+      // Excel en Windows suele guardar en Windows-1252: si se ven caracteres rotos, se relee así
+      read("utf-8").then(text => (text.includes("\uFFFD") ? read("windows-1252") : text)).then(showCsvPreview);
+    }
+
+    function showCsvPreview(text) {
+      csvRows = csvToRows(parseCSV(text));
+      const box = document.getElementById("csvPreview");
+      const btn = document.getElementById("csvImportBtn");
+      box.classList.remove("hidden");
+
+      if (csvRows.length === 0) {
+        box.innerHTML = '<p class="text-sm text-red-600">No se encontraron filas con datos en el archivo.</p>';
+        btn.disabled = true;
+        return;
+      }
+      if (csvRows.length > MAX_CSV_ROWS) {
+        box.innerHTML = `<p class="text-sm text-red-600">El archivo tiene ${csvRows.length} filas; el máximo es ${MAX_CSV_ROWS}. Divídelo en varios archivos.</p>`;
+        csvRows = [];
+        btn.disabled = true;
+        return;
+      }
+      const sample = csvRows.slice(0, 5).map(r => `
+        <tr class="border-b">
+          <td class="p-2 text-gray-500">${esc(r.line)}</td>
+          <td class="p-2 truncate max-w-xs">${esc(r.targetUrl)}</td>
+          <td class="p-2 font-mono">${esc(r.shortCode) || '<span class="text-gray-400">(automático)</span>'}</td>
+          <td class="p-2">${esc(r.notes)}</td>
+        </tr>`).join("");
+      box.innerHTML = `
+        <p class="text-sm mb-2"><b>${csvRows.length}</b> fila(s) listas para importar. Vista previa de las primeras ${Math.min(5, csvRows.length)}:</p>
+        <div class="overflow-x-auto border rounded">
+          <table class="w-full text-left text-sm">
+            <thead><tr class="bg-gray-50 border-b"><th class="p-2">Fila</th><th class="p-2">URL</th><th class="p-2">Código</th><th class="p-2">Notas</th></tr></thead>
+            <tbody>${sample}</tbody>
+          </table>
+        </div>`;
+      btn.disabled = false;
+    }
+
+    function resetCsvUi(clearInput = true) {
+      csvRows = [];
+      document.getElementById("csvPreview").classList.add("hidden");
+      document.getElementById("csvPreview").innerHTML = "";
+      document.getElementById("csvResult").classList.add("hidden");
+      document.getElementById("csvImportBtn").disabled = true;
+      if (clearInput) document.getElementById("csvFile").value = "";
+    }
+
+    async function importCsv() {
+      if (csvRows.length === 0) return;
+      const btn = document.getElementById("csvImportBtn");
+      const result = document.getElementById("csvResult");
+      btn.disabled = true;
+      result.classList.remove("hidden");
+
+      const rows = csvRows;
+      csvLastRows = Object.fromEntries(rows.map(r => [r.line, r]));
+      let created = 0;
+      const failed = [];
+
+      for (let i = 0; i < rows.length; i += CSV_CHUNK) {
+        const chunk = rows.slice(i, i + CSV_CHUNK);
+        result.innerHTML = `<p class="text-sm text-gray-600">Importando… ${Math.min(i + CSV_CHUNK, rows.length)} de ${rows.length}</p>`;
+        const res = await apiRequest({ action: "create_bulk", rows: chunk });
+        if (checkAuth(res)) return;
+        if (res.success) {
+          created += res.created;
+          failed.push(...res.failed);
+        } else {
+          chunk.forEach(r => failed.push({ line: r.line, error: res.error || "Error desconocido" }));
+        }
+      }
+
+      csvLastFailed = failed;
+      const list = failed.slice(0, 100).map(f =>
+        `<div class="px-3 py-1 border-b text-sm"><span class="font-semibold">Fila ${esc(f.line)}:</span> ${esc(f.error)}</div>`
+      ).join("");
+      result.innerHTML = `
+        <div class="p-3 rounded bg-green-50 text-green-800 text-sm mb-2">✅ ${created} enlace(s) creado(s).${failed.length ? ` ⚠️ ${failed.length} fila(s) con error.` : ""}</div>
+        ${failed.length ? `
+          <div class="max-h-48 overflow-y-auto border rounded">${list}${failed.length > 100 ? `<div class="px-3 py-1 text-sm text-gray-500">… y ${failed.length - 100} más (están en el archivo de errores)</div>` : ""}</div>
+          <button type="button" onclick="downloadCsvErrors()" class="mt-2 bg-gray-200 text-gray-800 px-3 py-1.5 rounded text-sm font-semibold hover:bg-gray-300">📥 Descargar filas con error</button>` : ""}`;
+
+      csvRows = [];
+      document.getElementById("csvFile").value = "";
+      document.getElementById("csvPreview").classList.add("hidden");
+      loadLinks();
+    }
+
+    // Evita que Excel interprete un valor como fórmula (=, +, -, @)
+    function csvCell(v) {
+      let t = String(v ?? "");
+      if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+      return /[;,"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    }
+
+    function downloadTextFile(name, content) {
+      const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    function downloadCsvTemplate() {
+      downloadTextFile("plantilla-enlaces.csv",
+        "url;codigo;notas\r\n" +
+        "https://ejemplo.com/promocion;promo1;Campaña de ejemplo\r\n" +
+        "https://ejemplo.com/otra-pagina;;Sin código: se genera automáticamente\r\n");
+    }
+
+    function downloadCsvErrors() {
+      const lines = ["fila;url;codigo;notas;error"].concat(csvLastFailed.map(f => {
+        const r = csvLastRows[f.line] || {};
+        return [f.line, r.targetUrl, r.shortCode, r.notes, f.error].map(csvCell).join(";");
+      }));
+      downloadTextFile("enlaces-con-error.csv", lines.join("\r\n") + "\r\n");
+    }
+
+    // =========================================================================
+    // CREDENCIALES: GENERAR CONTRASEÑA Y COMPARTIR POR WHATSAPP
+    // =========================================================================
+    let credData = null;
+
+    // 12 caracteres sin letras ambiguas (I, O, l, o, 0, 1); muestreo sin sesgo
+    function generatePassword(inputId) {
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; // 56 símbolos
+      let out = "";
+      while (out.length < 12) {
+        const b = crypto.getRandomValues(new Uint8Array(1))[0];
+        if (b < 224) out += alphabet[b % 56]; // 224 = 56 × 4 → sin sesgo
+      }
+      const input = document.getElementById(inputId);
+      input.value = out;
+      input.type = "text"; // visible para que el administrador la vea
+    }
+
+    function openCredModal(username, password) {
+      credData = { username, password };
+      document.getElementById("credUser").textContent = username;
+      document.getElementById("credPass").textContent = password;
+      document.getElementById("credUrl").textContent = baseUrl;
+      document.getElementById("credPhone").value = "";
+      document.getElementById("credModal").classList.remove("hidden");
+    }
+
+    function closeCredModal() {
+      credData = null;
+      document.getElementById("credPass").textContent = "";
+      document.getElementById("credModal").classList.add("hidden");
+    }
+
+    function credMessage() {
+      return `Hola 👋 Te comparto tu acceso al Gestor de Enlaces y Códigos QR:\n\n` +
+        `🔗 Panel: ${baseUrl}\n` +
+        `👤 Usuario: ${credData.username}\n` +
+        `🔑 Contraseña: ${credData.password}\n\n` +
+        `Esta es una contraseña temporal: al ingresar por primera vez el sistema te pedirá crear una nueva.`;
+    }
+
+    function whatsappNumber(raw) {
+      let digits = String(raw || "").replace(/\D/g, "");
+      if (digits.length === 10 && digits.startsWith("3")) digits = "57" + digits; // celular colombiano
+      return digits;
+    }
+
+    function shareWhatsApp() {
+      if (!credData) return;
+      const number = whatsappNumber(document.getElementById("credPhone").value);
+      window.open(`https://wa.me/${number}?text=${encodeURIComponent(credMessage())}`, "_blank", "noopener");
+    }
+
+    async function copyCredentials() {
+      if (!credData) return;
+      try {
+        await navigator.clipboard.writeText(credMessage());
+        alert("Datos copiados al portapapeles.");
+      } catch (e) {
+        prompt("Copia los datos de acceso:", credMessage());
+      }
+    }
+
+    // =========================================================================
+    // QR Y PLANTILLA (sin cambios)
+    // =========================================================================
+    function showQR(url, code) {
+      const container = document.getElementById("qrcode");
+      container.innerHTML = "";
+      
+      document.getElementById("modalShortCodeText").innerText = code;
+
+      new QRCode(container, { text: url, width: 350, height: 350 });
+      
+      const btnDownload = document.getElementById("templateDownloadBtn");
+      btnDownload.onclick = () => downloadIntegratedTemplate(url, code);
+      
+      document.getElementById("qrModal").classList.remove("hidden");
+    }
+
+    // =========================================================================
+    // EXPORTACIÓN USANDO COORDENADAS EXACTAS EN PÍXELES FIJOS 
+    // (Independientes del tamaño de pantalla o dispositivo)
+    // =========================================================================
+    function downloadIntegratedTemplate(url, code) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      const templateImg = new Image();
+      templateImg.crossOrigin = "anonymous";
+      templateImg.src = "boceto.fw.png";
+
+      templateImg.onload = () => {
+        // Obtenemos las dimensiones exactas de tu imagen original (ej. ancho y alto nativos)
+        const imgWidth = templateImg.naturalWidth || 1200;
+        const imgHeight = templateImg.naturalHeight || 1600;
+
+        canvas.width = imgWidth;
+        canvas.height = imgHeight;
+
+        // 1. Dibujar la plantilla base
+        ctx.drawImage(templateImg, 0, 0);
+
+        // 2. Generar QR temporalmente
+        const tempDiv = document.createElement("div");
+        document.body.appendChild(tempDiv);
+        new QRCode(tempDiv, { text: url, width: 500, height: 500 });
+
+        setTimeout(() => {
+          const qrCanvas = tempDiv.querySelector("canvas");
+          const qrImg = tempDiv.querySelector("img");
+
+          const proceedDrawing = (qrSource) => {
+            /* 
+              CONFIGURA AQUÍ TUS COORDENADAS FIJAS EN PÍXELES EXACTOS:
+              Cambia estos valores numéricos directamente según la posición real 
+              en píxeles de tu imagen "boceto.fw.png".
+            */
+            const qrSize = 296;                  // Tamaño fijo en píxeles del QR en la imagen final
+            const qrX = (imgWidth * 0.75) - (qrSize / 2);  // Coordenada X fija (ej. 63% del ancho real)
+            const qrY = (imgHeight * 0.71) - (qrSize / 2); // Coordenada Y fija (ej. 54% del alto real)
+
+            // Fondo blanco para el QR
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20);
+
+            // Dibujar QR en coordenadas fijas
+            ctx.drawImage(qrSource, qrX, qrY, qrSize, qrSize);
+
+            // 3. Dibujar el código corto en coordenadas fijas en píxeles
+            ctx.fillStyle = "#999999";
+            ctx.font = "bold 40px monospace";
+            ctx.textAlign = "center";
+            
+            const textX = imgWidth * 0.75;   // Coordenada X fija para el texto
+            const textY = imgHeight * 0.83;  // Coordenada Y fija para el texto (debajo del QR)
+            
+            ctx.fillText(code, textX, textY);
+
+            // 4. Descargar la imagen resultante
+            const pngUrl = canvas.toDataURL("image/png");
+            const downloadLink = document.createElement("a");
+            downloadLink.href = pngUrl;
+            downloadLink.download = `${code}.png`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            document.body.removeChild(tempDiv);
+          };
+
+          if (qrCanvas) {
+            proceedDrawing(qrCanvas);
+          } else if (qrImg) {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => proceedDrawing(img);
+            img.src = qrImg.src;
+          } else {
+            alert("No se pudo generar el código QR.");
+            document.body.removeChild(tempDiv);
+          }
+        }, 200);
+      };
+
+      templateImg.onerror = () => {
+        alert("No se pudo cargar la imagen 'boceto.fw.png'. Verifica que esté en la misma carpeta.");
+      };
+    }
+
+    function closeQrModal() {
+      document.getElementById("qrModal").classList.add("hidden");
+    }
+  </script>
+</body>
+</html>
