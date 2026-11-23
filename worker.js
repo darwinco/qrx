@@ -7,7 +7,7 @@
 //   Durable Object Registry -> ÚNICA fuente de verdad (SQLite): enlaces,
 //        usuarios e intentos de login. Procesa una operación a la vez,
 //        por eso reclamar un enlace tiene un único ganador, siempre.
-//   KV (binding "bd")      -> solo se lee una vez para migrar tus datos
+//   KV (binding "app")     -> solo se lee una vez para migrar tus datos
 //        anteriores al Durable Object. Luego ya no se usa.
 //
 // ROLES
@@ -18,7 +18,7 @@
 //
 // REQUISITOS (ver wrangler.toml)
 //   Binding Durable Object:  REGISTRY  (clase Registry)
-//   Binding KV (migración):  bd
+//   Binding KV (migración):  app
 //   Secrets: ADMIN_USER, ADMIN_PASS, TOKEN_SECRET
 // ============================================================
 
@@ -114,7 +114,7 @@ export class Registry extends DurableObject {
         this.sql.exec("ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0");
       }
       // Sin binding KV no hay nada que migrar
-      this.migrated = this.#meta("mig_phase") === "done" || !env.bd;
+      this.migrated = this.#meta("mig_phase") === "done" || !env.app;
     });
   }
 
@@ -185,8 +185,8 @@ export class Registry extends DurableObject {
 
   // Importa un registro suelto desde KV (para no perder enlaces mientras dura la migración)
   async #pull(phase, key) {
-    if (!this.env.bd) return false;
-    const raw = await this.env.bd.get((phase === "users" ? USER_PREFIX : LINK_PREFIX) + key);
+    if (!this.env.app) return false;
+    const raw = await this.env.app.get((phase === "users" ? USER_PREFIX : LINK_PREFIX) + key);
     return raw ? this.#importRaw(phase, raw) > 0 : false;
   }
 
@@ -206,8 +206,8 @@ export class Registry extends DurableObject {
       const cursor = this.#meta("mig_cursor") || undefined;
       const prefix = phase === "users" ? USER_PREFIX : LINK_PREFIX;
 
-      const page = await this.env.bd.list({ prefix, cursor, limit: 20 });
-      const raws = await Promise.all(page.keys.map(k => this.env.bd.get(k.name)));
+      const page = await this.env.app.list({ prefix, cursor, limit: 20 });
+      const raws = await Promise.all(page.keys.map(k => this.env.app.get(k.name)));
       ops += 1 + page.keys.length;
       for (const raw of raws) if (raw) imported += this.#importRaw(phase, raw);
 
