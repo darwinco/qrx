@@ -5,10 +5,9 @@ main = "worker.js"
 compatibility_date = "2025-01-01"
 
 # --- KV existente (tus datos anteriores). Solo se lee UNA vez para migrarlos. ---
-# Reemplaza el id por el de tu namespace "bd":  npx wrangler kv namespace list
 [[kv_namespaces]]
-binding = "bd"
-id = "PEGA_AQUI_EL_ID_DE_TU_KV"
+binding = "app"
+id = "b808855f831a497590ec6645375ae19d"
 
 # --- Durable Object: fuente única de verdad (consistencia fuerte) ---
 [[durable_objects.bindings]]
