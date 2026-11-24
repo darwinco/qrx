@@ -11,51 +11,56 @@
     .template-container {
       position: relative;
       display: inline-block;
-      max-width: 450px;
+      max-width: 100%;
       width: 100%;
+      user-select: none;
+      touch-action: none;
+      overflow: hidden;
     }
     .template-img {
       width: 100%;
       height: auto;
       display: block;
+      pointer-events: none;
     }
-    /* 
-      POSICIONAMIENTO EN PANTALLA (Vista Previa del Modal)
-      Puedes ajustar estos valores si deseas mover visualmente los elementos en la previsualización.
-    */
     #modalShortCodeText {
       position: absolute;
-      top: 82%;   
-      left: 76%;  
       transform: translate(-50%, -50%);
       font-family: monospace;
       font-weight: bold;
-      font-size: 14px;
-      color: #000;
-      z-index: 10;
-      background: rgba(255, 255, 255, 0.9);
-      padding: 1px 6px;
-      border-radius: 4px;
+      line-height: 1;
+      white-space: nowrap;
+      z-index: 12;
+      cursor: move;
+      padding: 2px 4px;
+      border-radius: 3px;
+      outline: 1px dashed rgba(59, 130, 246, 0.55);
+    }
+    #modalShortCodeText:hover {
+      outline: 2px solid #2563eb;
+      background: rgba(255, 255, 255, 0.25);
     }
     #modalQrBox {
       position: absolute;
-      top: 69%;   
-      left: 72%;  
       transform: translate(-50%, -50%);
-      width: 100px; 
-      height: 100px; 
-      background: white; 
-      display: flex; 
-      align-items: center; 
+      background: #FFFFFF;
+      display: flex;
+      align-items: center;
       justify-content: center;
+      box-sizing: border-box;
       z-index: 10;
+      cursor: move;
+      outline: 2px dashed rgba(59, 130, 246, 0.7);
     }
-    .qr-download-btn {
-      position: absolute;
-      top: 100%;   
-      left: 50%;  
-      transform: translate(-50%, -50%);
-      z-index: 10;
+    #modalQrBox:hover {
+      outline: 2px solid #2563eb;
+    }
+    #modalQrBox img,
+    #modalQrBox canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -256,7 +261,7 @@
   </div>
 
   <!-- MODAL CONTRASEÑA -->
-  <div id="pwdModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+  <div id="pwdModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
     <div class="bg-white p-6 rounded-lg max-w-sm w-full">
       <h3 id="pwdModalTitle" class="text-lg font-bold mb-2"></h3>
       <p id="pwdForcedNote" class="hidden text-sm text-gray-600 mb-3">
@@ -279,7 +284,7 @@
   </div>
 
   <!-- MODAL CREDENCIALES (compartir por WhatsApp) -->
-  <div id="credModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+  <div id="credModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
     <div class="bg-white p-6 rounded-lg max-w-md w-full">
       <h3 class="text-lg font-bold mb-1">Credenciales de acceso</h3>
       <p class="text-sm text-gray-500 mb-2">La contraseña solo se muestra ahora. Después no se puede consultar, únicamente restablecer.</p>
@@ -300,26 +305,101 @@
     </div>
   </div>
 
-  <!-- MODAL MOSTRAR QR CON PLANTILLA INTEGRADA (ADMINISTRADOR) -->
-  <div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-    <div class="bg-white p-6 rounded-lg text-center max-w-lg w-full relative">
-      <h3 class="text-lg font-bold mb-4">Vista Previa de Plantilla con QR</h3>
-      
-      <div class="template-container mx-auto mb-4 shadow border rounded">
-        <img src="boceto.fw.png" alt="Plantilla Boceto" class="template-img">
-        
-        <div id="modalShortCodeText"></div>
-
-        <div id="modalQrBox">
-          <div id="qrcode"></div>
+  <!-- MODAL PERSONALIZAR Y EXPORTAR PLANTILLA CON QR (ADMINISTRADOR) -->
+  <div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white p-6 rounded-lg max-w-4xl w-full relative my-auto shadow-xl">
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <div>
+          <h3 class="text-lg font-bold text-gray-800">Personalizar y Exportar Plantilla con QR</h3>
+          <p class="text-xs text-gray-500">Arrastra el código QR o el código corto sobre el boceto para ubicarlos. Los ajustes se guardan automáticamente.</p>
         </div>
-
-        <button id="templateDownloadBtn" class="qr-download-btn bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow-lg hover:bg-emerald-700 transition">
-          📥 Descargar Plantilla Completa
-        </button>
+        <button type="button" onclick="closeQrModal()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none px-2">&times;</button>
       </div>
 
-      <button onclick="closeQrModal()" class="bg-gray-500 text-white px-4 py-2 rounded w-full font-semibold mt-4">Cerrar</button>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+        <!-- COLUMNA IZQUIERDA: LIENZO INTERACTIVO -->
+        <div class="md:col-span-7 flex flex-col items-center bg-gray-50 p-3 rounded border">
+          <div id="templateContainer" class="template-container shadow border rounded bg-white">
+            <img id="templatePreviewImg" src="boceto.fw.png" alt="Plantilla Boceto" class="template-img" onload="syncModalOverlay()">
+            <div id="modalQrBox" title="Arrastra para mover el QR">
+              <div id="qrcode"></div>
+            </div>
+            <div id="modalShortCodeText" title="Arrastra para mover el código corto"></div>
+          </div>
+          <p id="templateDimensionsLabel" class="text-xs text-gray-500 mt-2"></p>
+        </div>
+
+        <!-- COLUMNA DERECHA: CONTROLES DEL PERSONALIZADOR -->
+        <div class="md:col-span-5 space-y-4 text-left">
+          <!-- Boceto / Plantilla -->
+          <div class="bg-gray-50 p-3 rounded border space-y-2">
+            <label class="block text-sm font-semibold text-gray-700">1. Boceto (Plantilla)</label>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" onclick="useDefaultTemplateImage()" class="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-100">
+                🖼️ Plantilla por defecto
+              </button>
+              <label class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-blue-700 cursor-pointer">
+                📤 Subir imagen propia
+                <input type="file" id="customTemplateInput" accept="image/png,image/jpeg,image/webp" onchange="handleCustomTemplateUpload(this)" class="hidden">
+              </label>
+            </div>
+            <p id="templateSourceStatus" class="text-xs text-gray-500">Usando: boceto.fw.png (por defecto)</p>
+          </div>
+
+          <!-- Tamaño y posición del QR -->
+          <div class="bg-gray-50 p-3 rounded border space-y-2">
+            <div class="flex justify-between items-center">
+              <label for="qrScaleRange" class="text-sm font-semibold text-gray-700">2. Tamaño del QR</label>
+              <span id="qrScaleValue" class="text-xs font-mono text-gray-600">25%</span>
+            </div>
+            <input type="range" id="qrScaleRange" min="10" max="60" step="0.5" value="25" oninput="updateQrScale(this.value)" class="w-full">
+            <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 pt-1">
+              <div>Posición X: <b id="qrPosXLabel">75.0%</b></div>
+              <div>Posición Y: <b id="qrPosYLabel">71.0%</b></div>
+            </div>
+          </div>
+
+          <!-- Código corto: visibilidad, tamaño, color y posición -->
+          <div class="bg-gray-50 p-3 rounded border space-y-2">
+            <div class="flex justify-between items-center">
+              <label class="text-sm font-semibold text-gray-700">3. Texto del Código Corto</label>
+              <label class="inline-flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                <input type="checkbox" id="showCodeCheckbox" checked onchange="toggleShowCode(this.checked)" class="rounded text-blue-600">
+                Mostrar
+              </label>
+            </div>
+            <div class="flex justify-between items-center">
+              <label for="codeScaleRange" class="text-xs text-gray-600">Tamaño de letra</label>
+              <span id="codeScaleValue" class="text-xs font-mono text-gray-600">3.3%</span>
+            </div>
+            <input type="range" id="codeScaleRange" min="1.5" max="8" step="0.1" value="3.3" oninput="updateCodeScale(this.value)" class="w-full">
+            <div class="flex items-center justify-between pt-1">
+              <label for="codeColorInput" class="text-xs text-gray-600">Color del texto</label>
+              <div class="flex items-center gap-2">
+                <input type="color" id="codeColorInput" value="#999999" oninput="updateCodeColor(this.value)" class="w-8 h-7 border rounded cursor-pointer p-0">
+                <span id="codeColorLabel" class="text-xs font-mono text-gray-600">#999999</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 pt-1">
+              <div>Posición X: <b id="codePosXLabel">75.0%</b></div>
+              <div>Posición Y: <b id="codePosYLabel">83.0%</b></div>
+            </div>
+          </div>
+
+          <!-- Acciones -->
+          <div class="flex flex-col gap-2 pt-1">
+            <button id="templateDownloadBtn" type="button" class="bg-emerald-600 text-white px-4 py-2.5 rounded text-sm font-bold shadow hover:bg-emerald-700 transition">
+              📥 Descargar Plantilla Completa
+            </button>
+            <button type="button" onclick="resetTemplateConfig()" class="bg-amber-100 text-amber-800 border border-amber-300 px-4 py-2 rounded text-xs font-semibold hover:bg-amber-200 transition">
+              ↺ Restablecer valores por defecto
+            </button>
+            <button type="button" onclick="closeQrModal()" class="bg-gray-500 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-gray-600">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -361,6 +441,7 @@
 
     window.onload = () => {
       localStorage.removeItem("admin_token"); // sesión del formato anterior
+      initTemplateEditor();
       if (redirectCode) {
         handleRedirect(redirectCode);
       } else if (localStorage.getItem("auth_token")) {
@@ -1204,80 +1285,333 @@
     }
 
     // =========================================================================
-    // QR Y PLANTILLA (ADMINISTRADOR)
+    // PERSONALIZADOR DE PLANTILLA Y EXPORTACIÓN SINCRONIZADA (ADMINISTRADOR)
     // =========================================================================
+    const TEMPLATE_STORAGE_KEY = "qrx_admin_template_v1";
+    const DEFAULT_TEMPLATE_CONFIG = {
+      src: "boceto.fw.png",
+      sourceName: "boceto.fw.png (por defecto)",
+      qrX: 0.75,        // Centro X del QR (proporción 0..1 del ancho real)
+      qrY: 0.71,        // Centro Y del QR (proporción 0..1 del alto real)
+      qrScale: 0.25,    // Tamaño total del cuadro QR (con borde blanco) respecto al ancho
+      showCode: true,   // Mostrar u ocultar el código corto
+      codeX: 0.75,      // Centro X del texto (anclado debajo del QR por defecto)
+      codeY: 0.83,      // Centro Y del texto
+      codeScale: 0.033, // Tamaño de fuente respecto al ancho real (40px en 1200px)
+      codeColor: "#999999"
+    };
+
+    let templateConfig = loadTemplateConfig();
+    let dragTarget = null; // "qr" | "code" | null
+
+    function loadTemplateConfig() {
+      try {
+        const raw = localStorage.getItem(TEMPLATE_STORAGE_KEY);
+        if (!raw) return { ...DEFAULT_TEMPLATE_CONFIG };
+        const parsed = JSON.parse(raw);
+        return {
+          ...DEFAULT_TEMPLATE_CONFIG,
+          ...parsed,
+          qrX: clamp(Number(parsed.qrX) || DEFAULT_TEMPLATE_CONFIG.qrX, 0.05, 0.95),
+          qrY: clamp(Number(parsed.qrY) || DEFAULT_TEMPLATE_CONFIG.qrY, 0.05, 0.95),
+          qrScale: clamp(Number(parsed.qrScale) || DEFAULT_TEMPLATE_CONFIG.qrScale, 0.10, 0.60),
+          showCode: parsed.showCode !== false,
+          codeX: clamp(Number(parsed.codeX) || DEFAULT_TEMPLATE_CONFIG.codeX, 0.05, 0.95),
+          codeY: clamp(Number(parsed.codeY) || DEFAULT_TEMPLATE_CONFIG.codeY, 0.03, 0.97),
+          codeScale: clamp(Number(parsed.codeScale) || DEFAULT_TEMPLATE_CONFIG.codeScale, 0.015, 0.08),
+          codeColor: /^#[0-9a-fA-F]{6}$/.test(parsed.codeColor) ? parsed.codeColor : DEFAULT_TEMPLATE_CONFIG.codeColor
+        };
+      } catch {
+        return { ...DEFAULT_TEMPLATE_CONFIG };
+      }
+    }
+
+    function saveTemplateConfig() {
+      try {
+        localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templateConfig));
+        return true;
+      } catch (e) {
+        alert("No se pudo guardar en localStorage (la imagen subida supera el espacio disponible del navegador). Prueba con una imagen más liviana.");
+        return false;
+      }
+    }
+
+    function clamp(val, min, max) {
+      return Math.min(max, Math.max(min, val));
+    }
+
+    function initTemplateEditor() {
+      const qrBox = document.getElementById("modalQrBox");
+      const codeBox = document.getElementById("modalShortCodeText");
+
+      const startDrag = (target) => (e) => {
+        e.preventDefault();
+        dragTarget = target;
+        e.currentTarget.setPointerCapture(e.pointerId);
+      };
+
+      const moveDrag = (e) => {
+        if (!dragTarget) return;
+        const img = document.getElementById("templatePreviewImg");
+        const rect = img.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+
+        const nx = (e.clientX - rect.left) / rect.width;
+        const ny = (e.clientY - rect.top) / rect.height;
+
+        if (dragTarget === "qr") {
+          templateConfig.qrX = clamp(nx, 0.05, 0.95);
+          templateConfig.qrY = clamp(ny, 0.05, 0.95);
+        } else if (dragTarget === "code") {
+          templateConfig.codeX = clamp(nx, 0.05, 0.95);
+          templateConfig.codeY = clamp(ny, 0.03, 0.97);
+        }
+        syncModalOverlay();
+      };
+
+      const endDrag = (e) => {
+        if (!dragTarget) return;
+        if (e.currentTarget.hasPointerCapture && e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+        dragTarget = null;
+        saveTemplateConfig();
+      };
+
+      qrBox.addEventListener("pointerdown", startDrag("qr"));
+      qrBox.addEventListener("pointermove", moveDrag);
+      qrBox.addEventListener("pointerup", endDrag);
+      qrBox.addEventListener("pointercancel", endDrag);
+
+      codeBox.addEventListener("pointerdown", startDrag("code"));
+      codeBox.addEventListener("pointermove", moveDrag);
+      codeBox.addEventListener("pointerup", endDrag);
+      codeBox.addEventListener("pointercancel", endDrag);
+
+      window.addEventListener("resize", () => {
+        if (!document.getElementById("qrModal").classList.contains("hidden")) {
+          syncModalOverlay();
+        }
+      });
+    }
+
+    function syncControlsUI() {
+      document.getElementById("templateSourceStatus").textContent = `Usando: ${templateConfig.sourceName}`;
+      document.getElementById("qrScaleRange").value = (templateConfig.qrScale * 100).toFixed(1);
+      document.getElementById("qrScaleValue").textContent = `${(templateConfig.qrScale * 100).toFixed(1)}%`;
+      document.getElementById("qrPosXLabel").textContent = `${(templateConfig.qrX * 100).toFixed(1)}%`;
+      document.getElementById("qrPosYLabel").textContent = `${(templateConfig.qrY * 100).toFixed(1)}%`;
+
+      document.getElementById("showCodeCheckbox").checked = templateConfig.showCode;
+      document.getElementById("codeScaleRange").value = (templateConfig.codeScale * 100).toFixed(1);
+      document.getElementById("codeScaleValue").textContent = `${(templateConfig.codeScale * 100).toFixed(1)}%`;
+      document.getElementById("codeColorInput").value = templateConfig.codeColor;
+      document.getElementById("codeColorLabel").textContent = templateConfig.codeColor.toUpperCase();
+      document.getElementById("codePosXLabel").textContent = `${(templateConfig.codeX * 100).toFixed(1)}%`;
+      document.getElementById("codePosYLabel").textContent = `${(templateConfig.codeY * 100).toFixed(1)}%`;
+    }
+
+    // Mantiene la vista previa exactamente proporcional al renderizado final en <canvas>
+    function syncModalOverlay() {
+      const img = document.getElementById("templatePreviewImg");
+      const qrBox = document.getElementById("modalQrBox");
+      const codeBox = document.getElementById("modalShortCodeText");
+      const dimLabel = document.getElementById("templateDimensionsLabel");
+
+      const displayW = img.clientWidth;
+      const natW = img.naturalWidth || 1200;
+      const natH = img.naturalHeight || 1600;
+      dimLabel.textContent = `Resolución de exportación: ${natW} × ${natH} px`;
+
+      if (displayW > 0) {
+        const boxSizePx = displayW * templateConfig.qrScale;
+        const padPx = Math.max(2, boxSizePx * (10 / 316)); // mismo margen blanco proporcional que en canvas
+        qrBox.style.width = `${boxSizePx}px`;
+        qrBox.style.height = `${boxSizePx}px`;
+        qrBox.style.padding = `${padPx}px`;
+        qrBox.style.left = `${templateConfig.qrX * 100}%`;
+        qrBox.style.top = `${templateConfig.qrY * 100}%`;
+
+        const fontSizePx = Math.max(8, displayW * templateConfig.codeScale);
+        codeBox.style.fontSize = `${fontSizePx}px`;
+        codeBox.style.color = templateConfig.codeColor;
+        codeBox.style.left = `${templateConfig.codeX * 100}%`;
+        codeBox.style.top = `${templateConfig.codeY * 100}%`;
+      }
+
+      codeBox.classList.toggle("hidden", !templateConfig.showCode);
+      syncControlsUI();
+    }
+
+    function updateQrScale(percentVal) {
+      templateConfig.qrScale = clamp(Number(percentVal) / 100, 0.10, 0.60);
+      syncModalOverlay();
+      saveTemplateConfig();
+    }
+
+    function updateCodeScale(percentVal) {
+      templateConfig.codeScale = clamp(Number(percentVal) / 100, 0.015, 0.08);
+      syncModalOverlay();
+      saveTemplateConfig();
+    }
+
+    function updateCodeColor(hexColor) {
+      templateConfig.codeColor = hexColor;
+      syncModalOverlay();
+      saveTemplateConfig();
+    }
+
+    function toggleShowCode(checked) {
+      templateConfig.showCode = checked;
+      syncModalOverlay();
+      saveTemplateConfig();
+    }
+
+    function useDefaultTemplateImage() {
+      templateConfig.src = DEFAULT_TEMPLATE_CONFIG.src;
+      templateConfig.sourceName = DEFAULT_TEMPLATE_CONFIG.sourceName;
+      document.getElementById("customTemplateInput").value = "";
+      document.getElementById("templatePreviewImg").src = templateConfig.src;
+      saveTemplateConfig();
+      syncModalOverlay();
+    }
+
+    function handleCustomTemplateUpload(input) {
+      const file = input.files && input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          // Redimensiona si es muy grande para asegurar compatibilidad con el límite de localStorage (~5 MB)
+          const MAX_SIDE = 1600;
+          let w = img.naturalWidth;
+          let h = img.naturalHeight;
+          if (w > MAX_SIDE || h > MAX_SIDE) {
+            const ratio = Math.min(MAX_SIDE / w, MAX_SIDE / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+          }
+          const c = document.createElement("canvas");
+          c.width = w;
+          c.height = h;
+          c.getContext("2d").drawImage(img, 0, 0, w, h);
+
+          // Conserva PNG si tiene transparencia o es liviano; si es muy pesado usa JPEG de alta calidad
+          let dataUrl = c.toDataURL("image/png");
+          if (dataUrl.length > 2_500_000) {
+            dataUrl = c.toDataURL("image/jpeg", 0.9);
+          }
+
+          const prevSrc = templateConfig.src;
+          const prevName = templateConfig.sourceName;
+          templateConfig.src = dataUrl;
+          templateConfig.sourceName = `${file.name} (${w}×${h}px)`;
+
+          if (saveTemplateConfig()) {
+            document.getElementById("templatePreviewImg").src = dataUrl;
+            syncModalOverlay();
+          } else {
+            templateConfig.src = prevSrc;
+            templateConfig.sourceName = prevName;
+          }
+          input.value = "";
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function resetTemplateConfig() {
+      if (!confirm("¿Restablecer la plantilla por defecto y las coordenadas iniciales del QR y del código corto?")) return;
+      localStorage.removeItem(TEMPLATE_STORAGE_KEY);
+      templateConfig = { ...DEFAULT_TEMPLATE_CONFIG };
+      document.getElementById("customTemplateInput").value = "";
+      const img = document.getElementById("templatePreviewImg");
+      img.src = templateConfig.src;
+      syncModalOverlay();
+    }
+
     function showQR(url, code) {
       const container = document.getElementById("qrcode");
       container.innerHTML = "";
-      
       document.getElementById("modalShortCodeText").innerText = code;
 
-      new QRCode(container, { text: url, width: 350, height: 350 });
-      
+      new QRCode(container, { text: url, width: 400, height: 400 });
+
+      const previewImg = document.getElementById("templatePreviewImg");
+      if (previewImg.getAttribute("src") !== templateConfig.src) {
+        previewImg.src = templateConfig.src;
+      }
+
       const btnDownload = document.getElementById("templateDownloadBtn");
       btnDownload.onclick = () => downloadIntegratedTemplate(url, code);
-      
+
       document.getElementById("qrModal").classList.remove("hidden");
+      requestAnimationFrame(syncModalOverlay);
     }
 
     // =========================================================================
-    // EXPORTACIÓN USANDO COORDENADAS EXACTAS EN PÍXELES FIJOS 
-    // (Independientes del tamaño de pantalla o dispositivo)
+    // EXPORTACIÓN USANDO COORDENADAS PROPORCIONALES SINCRONIZADAS CON LA VISTA PREVIA
     // =========================================================================
     function downloadIntegratedTemplate(url, code) {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
 
       const templateImg = new Image();
-      templateImg.crossOrigin = "anonymous";
-      templateImg.src = "boceto.fw.png";
+      if (!templateConfig.src.startsWith("data:")) {
+        templateImg.crossOrigin = "anonymous";
+      }
+      templateImg.src = templateConfig.src;
 
       templateImg.onload = () => {
-        // Obtenemos las dimensiones exactas de tu imagen original (ej. ancho y alto nativos)
         const imgWidth = templateImg.naturalWidth || 1200;
         const imgHeight = templateImg.naturalHeight || 1600;
 
         canvas.width = imgWidth;
         canvas.height = imgHeight;
 
-        // 1. Dibujar la plantilla base
-        ctx.drawImage(templateImg, 0, 0);
+        // 1. Dibujar la plantilla base a resolución nativa
+        ctx.drawImage(templateImg, 0, 0, imgWidth, imgHeight);
 
-        // 2. Generar QR temporalmente
+        // 2. Generar QR de alta resolución temporalmente
         const tempDiv = document.createElement("div");
         document.body.appendChild(tempDiv);
-        new QRCode(tempDiv, { text: url, width: 500, height: 500 });
+        new QRCode(tempDiv, { text: url, width: 600, height: 600 });
 
         setTimeout(() => {
           const qrCanvas = tempDiv.querySelector("canvas");
           const qrImg = tempDiv.querySelector("img");
 
           const proceedDrawing = (qrSource) => {
-            /* 
-              CONFIGURA AQUÍ TUS COORDENADAS FIJAS EN PÍXELES EXACTOS:
-              Cambia estos valores numéricos directamente según la posición real 
-              en píxeles de tu imagen "boceto.fw.png".
-            */
-            const qrSize = 296;                  // Tamaño fijo en píxeles del QR en la imagen final
-            const qrX = (imgWidth * 0.75) - (qrSize / 2);  // Coordenada X fija (ej. 63% del ancho real)
-            const qrY = (imgHeight * 0.71) - (qrSize / 2); // Coordenada Y fija (ej. 54% del alto real)
+            // Medidas sincronizadas exactamente con syncModalOverlay()
+            const totalBoxSize = imgWidth * templateConfig.qrScale;
+            const pad = totalBoxSize * (10 / 316);
+            const qrInnerSize = totalBoxSize - pad * 2;
 
-            // Fondo blanco para el QR
+            const boxLeft = (imgWidth * templateConfig.qrX) - (totalBoxSize / 2);
+            const boxTop = (imgHeight * templateConfig.qrY) - (totalBoxSize / 2);
+
+            // Fondo blanco del cuadro QR
             ctx.fillStyle = "#FFFFFF";
-            ctx.fillRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20);
+            ctx.fillRect(boxLeft, boxTop, totalBoxSize, totalBoxSize);
 
-            // Dibujar QR en coordenadas fijas
-            ctx.drawImage(qrSource, qrX, qrY, qrSize, qrSize);
+            // Dibujar QR dentro del margen blanco
+            ctx.drawImage(qrSource, boxLeft + pad, boxTop + pad, qrInnerSize, qrInnerSize);
 
-            // 3. Dibujar el código corto en coordenadas fijas en píxeles
-            ctx.fillStyle = "#999999";
-            ctx.font = "bold 40px monospace";
-            ctx.textAlign = "center";
-            
-            const textX = imgWidth * 0.75;   // Coordenada X fija para el texto
-            const textY = imgHeight * 0.83;  // Coordenada Y fija para el texto (debajo del QR)
-            
-            ctx.fillText(code, textX, textY);
+            // 3. Dibujar el código corto si está activo
+            if (templateConfig.showCode) {
+              const fontSize = Math.round(imgWidth * templateConfig.codeScale);
+              ctx.fillStyle = templateConfig.codeColor;
+              ctx.font = `bold ${fontSize}px monospace`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+
+              const textX = imgWidth * templateConfig.codeX;
+              const textY = imgHeight * templateConfig.codeY;
+              ctx.fillText(code, textX, textY);
+            }
 
             // 4. Descargar la imagen resultante
             const pngUrl = canvas.toDataURL("image/png");
@@ -1305,7 +1639,7 @@
       };
 
       templateImg.onerror = () => {
-        alert("No se pudo cargar la imagen 'boceto.fw.png'. Verifica que esté en la misma carpeta.");
+        alert(`No se pudo cargar la plantilla "${templateConfig.sourceName}". Verifica el archivo o restablece la plantilla por defecto.`);
       };
     }
 
