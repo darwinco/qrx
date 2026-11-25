@@ -311,7 +311,7 @@
       <div class="flex justify-between items-center mb-4 border-b pb-3">
         <div>
           <h3 class="text-lg font-bold text-gray-800">Personalizar y Exportar Plantilla con QR</h3>
-          <p class="text-xs text-gray-500">Arrastra el código QR o el código corto sobre el boceto para ubicarlos. Los ajustes se guardan automáticamente.</p>
+          <p class="text-xs text-gray-500">Arrastra el código QR o el código corto sobre el boceto, o digita sus posiciones. Los ajustes se guardan automáticamente.</p>
         </div>
         <button type="button" onclick="closeQrModal()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none px-2">&times;</button>
       </div>
@@ -320,7 +320,7 @@
         <!-- COLUMNA IZQUIERDA: LIENZO INTERACTIVO -->
         <div class="md:col-span-7 flex flex-col items-center bg-gray-50 p-3 rounded border">
           <div id="templateContainer" class="template-container shadow border rounded bg-white">
-            <img id="templatePreviewImg" src="boceto.fw.png" alt="Plantilla Boceto" class="template-img" onload="syncModalOverlay()">
+            <img id="templatePreviewImg" src="boceto.jpg" alt="Plantilla Boceto" class="template-img" onload="syncModalOverlay()">
             <div id="modalQrBox" title="Arrastra para mover el QR">
               <div id="qrcode"></div>
             </div>
@@ -343,7 +343,7 @@
                 <input type="file" id="customTemplateInput" accept="image/png,image/jpeg,image/webp" onchange="handleCustomTemplateUpload(this)" class="hidden">
               </label>
             </div>
-            <p id="templateSourceStatus" class="text-xs text-gray-500">Usando: boceto.fw.png (por defecto)</p>
+            <p id="templateSourceStatus" class="text-xs text-gray-500">Usando: boceto.jpg (por defecto)</p>
           </div>
 
           <!-- Tamaño y posición del QR -->
@@ -354,8 +354,14 @@
             </div>
             <input type="range" id="qrScaleRange" min="10" max="60" step="0.5" value="25" oninput="updateQrScale(this.value)" class="w-full">
             <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 pt-1">
-              <div>Posición X: <b id="qrPosXLabel">75.0%</b></div>
-              <div>Posición Y: <b id="qrPosYLabel">71.0%</b></div>
+              <label class="flex flex-col gap-1">
+                <span>Posición X (%)</span>
+                <input type="number" id="qrPosXInput" min="5" max="95" step="0.1" value="75.0" onchange="updateQrPosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
+              </label>
+              <label class="flex flex-col gap-1">
+                <span>Posición Y (%)</span>
+                <input type="number" id="qrPosYInput" min="5" max="95" step="0.1" value="71.0" onchange="updateQrPosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
+              </label>
             </div>
           </div>
 
@@ -381,8 +387,14 @@
               </div>
             </div>
             <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 pt-1">
-              <div>Posición X: <b id="codePosXLabel">75.0%</b></div>
-              <div>Posición Y: <b id="codePosYLabel">83.0%</b></div>
+              <label class="flex flex-col gap-1">
+                <span>Posición X (%)</span>
+                <input type="number" id="codePosXInput" min="5" max="95" step="0.1" value="75.0" onchange="updateCodePosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
+              </label>
+              <label class="flex flex-col gap-1">
+                <span>Posición Y (%)</span>
+                <input type="number" id="codePosYInput" min="3" max="97" step="0.1" value="83.0" onchange="updateCodePosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
+              </label>
             </div>
           </div>
 
@@ -1289,8 +1301,8 @@
     // =========================================================================
     const TEMPLATE_STORAGE_KEY = "qrx_admin_template_v1";
     const DEFAULT_TEMPLATE_CONFIG = {
-      src: "boceto.fw.png",
-      sourceName: "boceto.fw.png (por defecto)",
+      src: "boceto.jpg",
+      sourceName: "boceto.jpg (por defecto)",
       qrX: 0.75,        // Centro X del QR (proporción 0..1 del ancho real)
       qrY: 0.71,        // Centro Y del QR (proporción 0..1 del alto real)
       qrScale: 0.25,    // Tamaño total del cuadro QR (con borde blanco) respecto al ancho
@@ -1399,16 +1411,16 @@
       document.getElementById("templateSourceStatus").textContent = `Usando: ${templateConfig.sourceName}`;
       document.getElementById("qrScaleRange").value = (templateConfig.qrScale * 100).toFixed(1);
       document.getElementById("qrScaleValue").textContent = `${(templateConfig.qrScale * 100).toFixed(1)}%`;
-      document.getElementById("qrPosXLabel").textContent = `${(templateConfig.qrX * 100).toFixed(1)}%`;
-      document.getElementById("qrPosYLabel").textContent = `${(templateConfig.qrY * 100).toFixed(1)}%`;
+      document.getElementById("qrPosXInput").value = (templateConfig.qrX * 100).toFixed(1);
+      document.getElementById("qrPosYInput").value = (templateConfig.qrY * 100).toFixed(1);
 
       document.getElementById("showCodeCheckbox").checked = templateConfig.showCode;
       document.getElementById("codeScaleRange").value = (templateConfig.codeScale * 100).toFixed(1);
       document.getElementById("codeScaleValue").textContent = `${(templateConfig.codeScale * 100).toFixed(1)}%`;
       document.getElementById("codeColorInput").value = templateConfig.codeColor;
       document.getElementById("codeColorLabel").textContent = templateConfig.codeColor.toUpperCase();
-      document.getElementById("codePosXLabel").textContent = `${(templateConfig.codeX * 100).toFixed(1)}%`;
-      document.getElementById("codePosYLabel").textContent = `${(templateConfig.codeY * 100).toFixed(1)}%`;
+      document.getElementById("codePosXInput").value = (templateConfig.codeX * 100).toFixed(1);
+      document.getElementById("codePosYInput").value = (templateConfig.codeY * 100).toFixed(1);
     }
 
     // Mantiene la vista previa exactamente proporcional al renderizado final en <canvas>
@@ -1441,6 +1453,24 @@
 
       codeBox.classList.toggle("hidden", !templateConfig.showCode);
       syncControlsUI();
+    }
+
+    function updateQrPosInput() {
+      const xRaw = parseFloat(document.getElementById("qrPosXInput").value);
+      const yRaw = parseFloat(document.getElementById("qrPosYInput").value);
+      if (!Number.isNaN(xRaw)) templateConfig.qrX = clamp(xRaw / 100, 0.05, 0.95);
+      if (!Number.isNaN(yRaw)) templateConfig.qrY = clamp(yRaw / 100, 0.05, 0.95);
+      syncModalOverlay();
+      saveTemplateConfig();
+    }
+
+    function updateCodePosInput() {
+      const xRaw = parseFloat(document.getElementById("codePosXInput").value);
+      const yRaw = parseFloat(document.getElementById("codePosYInput").value);
+      if (!Number.isNaN(xRaw)) templateConfig.codeX = clamp(xRaw / 100, 0.05, 0.95);
+      if (!Number.isNaN(yRaw)) templateConfig.codeY = clamp(yRaw / 100, 0.03, 0.97);
+      syncModalOverlay();
+      saveTemplateConfig();
     }
 
     function updateQrScale(percentVal) {
