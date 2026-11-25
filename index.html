@@ -188,6 +188,27 @@
           <tbody id="linksTableBody"></tbody>
         </table>
       </div>
+
+      <!-- BARRA DE PAGINACIÓN -->
+      <div class="flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 bg-white px-4 py-3 rounded-lg shadow text-sm text-gray-700">
+        <div class="flex items-center gap-2">
+          <label for="pageSizeSelect" class="text-gray-600">Mostrar:</label>
+          <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="p-1.5 border rounded bg-white text-sm">
+            <option value="10" selected>10</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+            <option value="300">300</option>
+            <option value="all">Todos</option>
+          </select>
+          <span id="paginationSummary" class="text-gray-500 ml-2">0 resultados</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="prevPageBtn" type="button" onclick="goToPage(currentPage - 1)" class="px-3 py-1.5 border rounded bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">Anterior</button>
+          <span id="pageIndicator" class="px-2 font-mono text-xs sm:text-sm">Página 1 de 1</span>
+          <button id="nextPageBtn" type="button" onclick="goToPage(currentPage + 1)" class="px-3 py-1.5 border rounded bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">Siguiente</button>
+        </div>
+      </div>
     </div>
 
     <!-- PESTAÑA USUARIOS -->
@@ -200,7 +221,7 @@
             <input type="password" id="newUserPass" placeholder="Contraseña (mínimo 8 caracteres)" required minlength="8" maxlength="128" autocomplete="new-password" class="flex-1 p-2 border rounded">
             <button type="button" onclick="generatePassword('newUserPass')" title="Generar contraseña segura" class="bg-gray-200 px-3 rounded hover:bg-gray-300">🎲</button>
           </div>
-          <button type="submit" class="bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Crear Usuario</button>
+          <button type="submit" class="md:col-span-3 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Crear Usuario</button>
         </form>
       </div>
 
@@ -437,6 +458,8 @@
 
     let allLinksData = [];
     let filteredLinksData = [];
+    let currentPage = 1;
+    let pageSize = 10; // 10, 50, 100, 200, 300 o "all"
     let allUsersData = [];
     let myLinksData = [];
     let tempPassword = null; // contraseña temporal escrita en el login (solo memoria)
@@ -607,6 +630,7 @@
         allLinksData = res.data;
         document.getElementById("searchInput").value = "";
         document.getElementById("statusFilter").value = "all";
+        currentPage = 1;
         filterLinks();
       } else {
         alert("Error: " + res.error);
@@ -631,6 +655,47 @@
         <button data-url="${esc(shortUrl)}" data-code="${esc(code)}" onclick="downloadPlainQR(this.dataset.url, this.dataset.code)" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm">Descargar QR</button>`;
     }
 
+    function changePageSize(val) {
+      pageSize = val === "all" ? "all" : Number(val);
+      currentPage = 1;
+      renderTable(filteredLinksData);
+    }
+
+    function goToPage(page) {
+      const total = filteredLinksData.length;
+      const perPage = pageSize === "all" ? Math.max(1, total) : pageSize;
+      const totalPages = Math.max(1, Math.ceil(total / perPage));
+      currentPage = Math.min(Math.max(1, page), totalPages);
+      renderTable(filteredLinksData);
+    }
+
+    function updatePaginationControls(total) {
+      const summary = document.getElementById("paginationSummary");
+      const indicator = document.getElementById("pageIndicator");
+      const prevBtn = document.getElementById("prevPageBtn");
+      const nextBtn = document.getElementById("nextPageBtn");
+
+      if (total === 0) {
+        summary.textContent = "0 resultados";
+        indicator.textContent = "Página 1 de 1";
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        return;
+      }
+
+      const perPage = pageSize === "all" ? total : pageSize;
+      const totalPages = Math.max(1, Math.ceil(total / perPage));
+      if (currentPage > totalPages) currentPage = totalPages;
+
+      const startIdx = (currentPage - 1) * perPage;
+      const endIdx = Math.min(total, startIdx + perPage);
+
+      summary.textContent = `Mostrando ${startIdx + 1}–${endIdx} de ${total}`;
+      indicator.textContent = `Página ${currentPage} de ${totalPages}`;
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages;
+    }
+
     function renderTable(links) {
       filteredLinksData = links;
       const tbody = document.getElementById("linksTableBody");
@@ -638,11 +703,18 @@
 
       if (links.length === 0) {
         tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-gray-500">No se encontraron enlaces.</td></tr>`;
+        updatePaginationControls(0);
         updateSelectedCount();
         return;
       }
 
-      tbody.innerHTML = links.map(link => {
+      const perPage = pageSize === "all" ? links.length : pageSize;
+      const totalPages = Math.max(1, Math.ceil(links.length / perPage));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const startIdx = (currentPage - 1) * perPage;
+      const pageItems = links.slice(startIdx, startIdx + perPage);
+
+      tbody.innerHTML = pageItems.map(link => {
         const shortUrl = `${baseUrl}?r=${encodeURIComponent(link.shortCode)}`;
         const owner = link.owner
           ? `<span class="font-semibold">${esc(link.owner)}</span>`
@@ -668,6 +740,7 @@
           </tr>
         `;
       }).join("");
+      updatePaginationControls(links.length);
       updateSelectedCount();
     }
 
@@ -684,6 +757,7 @@
           (link.owner && link.owner.toLowerCase().includes(query))
         );
       });
+      currentPage = 1;
       renderTable(filtered);
     }
 
@@ -691,13 +765,14 @@
       if (!filteredLinksData.length) {
         return alert("No hay enlaces para exportar con el filtro actual.");
       }
-      const header = ["codigo_corto", "url_destino", "estado", "propietario", "clics"].map(csvCell).join(";");
+      const header = ["codigo_corto", "url_destino", "estado", "propietario", "clics", "notas"].map(csvCell).join(";");
       const rows = filteredLinksData.map(link => [
         link.shortCode,
         link.targetUrl,
         link.active ? "Activo" : "Inactivo",
         link.owner || "Sin asignar",
-        link.clicks ?? 0
+        link.clicks ?? 0,
+        link.notes || ""
       ].map(csvCell).join(";"));
       downloadTextFile("enlaces-qr.csv", [header, ...rows].join("\r\n") + "\r\n");
     }
@@ -717,17 +792,19 @@
       const checkboxes = document.querySelectorAll('.link-checkbox:checked');
       if (checkboxes.length === 0) return alert("Selecciona al menos un enlace.");
 
-      if (confirm(`¿Eliminar los ${checkboxes.length} enlaces seleccionados?`)) {
-        for (const cb of checkboxes) {
-          await apiRequest({ action: "delete", id: cb.value });
-        }
-        loadLinks();
+      if (!confirm(`¿Estás seguro de eliminar los ${checkboxes.length} enlace(s) seleccionado(s)?`)) return;
+      for (const cb of checkboxes) {
+        await apiRequest({ action: "delete", id: cb.value });
       }
+      loadLinks();
     }
 
     async function setActiveSelected(active) {
       const checkboxes = document.querySelectorAll('.link-checkbox:checked');
       if (checkboxes.length === 0) return alert("Selecciona al menos un enlace.");
+
+      const verbo = active ? "activar" : "desactivar";
+      if (!confirm(`¿Estás seguro de ${verbo} los ${checkboxes.length} enlace(s) seleccionado(s)?`)) return;
 
       for (const cb of checkboxes) {
         await apiRequest({ action: "set_active", id: cb.value, active });
@@ -741,9 +818,13 @@
       const shortCode = document.getElementById("shortCode").value;
       const notes = document.getElementById("notes").value;
 
-      const res = await apiRequest({ action: "create", targetUrl, shortCode, notes });
+      // Por defecto los códigos cortos se crean en estado Inactivo (active: false)
+      const res = await apiRequest({ action: "create", targetUrl, shortCode, notes, active: false });
       if (checkAuth(res)) return;
       if (res.success) {
+        if (res.id && res.active === true) {
+          await apiRequest({ action: "set_active", id: res.id, active: false });
+        }
         document.getElementById("targetUrl").value = "";
         document.getElementById("shortCode").value = "";
         document.getElementById("notes").value = "";
@@ -1113,13 +1194,18 @@
       const failed = [];
 
       for (let i = 0; i < rows.length; i += CSV_CHUNK) {
-        const chunk = rows.slice(i, i + CSV_CHUNK);
+        const chunk = rows.slice(i, i + CSV_CHUNK).map(r => ({ ...r, active: false }));
         result.innerHTML = `<p class="text-sm text-gray-600">Importando… ${Math.min(i + CSV_CHUNK, rows.length)} de ${rows.length}</p>`;
         const res = await apiRequest({ action: "create_bulk", rows: chunk });
         if (checkAuth(res)) return;
         if (res.success) {
           created += res.created;
           failed.push(...res.failed);
+          if (Array.isArray(res.createdIds) && res.createdIds.length) {
+            for (const id of res.createdIds) {
+              await apiRequest({ action: "set_active", id, active: false });
+            }
+          }
         } else {
           chunk.forEach(r => failed.push({ line: r.line, error: res.error || "Error desconocido" }));
         }
