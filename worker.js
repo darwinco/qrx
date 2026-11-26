@@ -3,28 +3,29 @@
 // Versión con DURABLE OBJECTS (consistencia fuerte)
 //
 // ARQUITECTURA
-//   Worker (este archivo)  -> rutas, sesiones, validaciones, contraseñas.
+//   Worker (este archivo)  -> rutas, sesiones, validaciones, contraseñas, Resend.
 //   Durable Object Registry -> ÚNICA fuente de verdad (SQLite): enlaces,
-//        usuarios e intentos de login. Procesa una operación a la vez,
-//        por eso reclamar un enlace tiene un único ganador, siempre.
+//        usuarios, tokens de recuperación e intentos de login.
 //   KV (binding "app")     -> solo se lee una vez para migrar tus datos
 //        anteriores al Durable Object. Luego ya no se usa.
 //
 // ROLES
 //   admin -> crea (uno a uno o por CSV), edita, elimina, activa/desactiva
-//            enlaces, asigna propietarios y gestiona usuarios.
-//   user  -> ve los enlaces activos SIN propietario (para reclamarlos) y los
-//            suyos. Solo cambia el destino (URL) de sus propios enlaces.
+//            enlaces, asigna propietarios y gestiona usuarios/correos.
+//   user  -> ve los enlaces suyos, ve/actualiza su correo y cambia el
+//            destino (URL) de sus propios enlaces.
 //
 // REQUISITOS (ver wrangler.toml)
 //   Binding Durable Object:  REGISTRY  (clase Registry)
 //   Binding KV (migración):  app
-//   Secrets: ADMIN_USER, ADMIN_PASS, TOKEN_SECRET
+//   Secrets: ADMIN_USER, ADMIN_PASS, TOKEN_SECRET, RESEND_API_KEY
+//   Vars/Secrets opcionales: FROM_EMAIL (ej. "no-reply@tudominio.com")
 // ============================================================
 
 import { DurableObject } from "cloudflare:workers";
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
+const RESET_TTL_MS = 30 * 60 * 1000;        // 30 minutos para recuperar contraseña
 const LINK_PREFIX = "link:"; // solo para migrar desde KV
 const USER_PREFIX = "user:"; // solo para migrar desde KV
 
@@ -34,6 +35,7 @@ const PBKDF2_ITER = 100000;
 
 const MAX_URL = 2048;
 const MAX_NOTES = 150;
+const MAX_EMAIL = 160;
 const MAX_BULK_ROWS = 500;  // filas por petición de importación
 const MAX_FAILS = 5;        // intentos fallidos permitidos por IP
 const FAIL_TTL_MS = 15 * 60 * 1000;
@@ -41,6 +43,7 @@ const MIGRATE_OPS = 40;     // lecturas de KV por paso de migración
 
 const USERNAME_RE = /^[a-z0-9_.-]{3,32}$/;
 const CODE_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const DUMMY_SALT = "0".repeat(32);
 
 // ---------- Respuestas ----------
@@ -65,11 +68,14 @@ function randomCode(len = 6) {
   return [...bytes].map(b => chars[b % chars.length]).join("");
 }
 
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
 // ============================================================
 // DURABLE OBJECT: fuente única de verdad
-// Cada método público es atómico respecto a los demás: el objeto
-// ejecuta una operación a la vez y las escrituras SQL síncronas
-// no pueden intercalarse con otras peticiones.
 // ============================================================
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS links (
@@ -85,6 +91,7 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_links_owner ON links(owner)`,
   `CREATE TABLE IF NOT EXISTS users (
      username TEXT PRIMARY KEY,
+     email TEXT NOT NULL DEFAULT '',
      salt TEXT NOT NULL,
      iter INTEGER NOT NULL,
      hash TEXT NOT NULL,
@@ -92,6 +99,13 @@ const SCHEMA = [
      pwd_version INTEGER NOT NULL DEFAULT 0,
      must_change INTEGER NOT NULL DEFAULT 0
    )`,
+  `CREATE TABLE IF NOT EXISTS password_resets (
+     token_hash TEXT PRIMARY KEY,
+     username TEXT NOT NULL,
+     expires_at INTEGER NOT NULL,
+     used INTEGER NOT NULL DEFAULT 0
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_resets_user ON password_resets(username)`,
   `CREATE TABLE IF NOT EXISTS fails (
      ip TEXT PRIMARY KEY,
      n INTEGER NOT NULL,
@@ -108,17 +122,18 @@ export class Registry extends DurableObject {
     this.migrating = null;
     ctx.blockConcurrencyWhile(async () => {
       for (const stmt of SCHEMA) this.sql.exec(stmt);
-      // Bases creadas antes de esta versión: agrega la columna sin perder datos
+      // Bases creadas antes de esta versión: agrega columnas sin perder datos
       const cols = this.sql.exec("PRAGMA table_info(users)").toArray();
       if (!cols.some(c => c.name === "must_change")) {
         this.sql.exec("ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0");
       }
-      // Sin binding KV no hay nada que migrar
+      if (!cols.some(c => c.name === "email")) {
+        this.sql.exec("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''");
+      }
       this.migrated = this.#meta("mig_phase") === "done" || !env.app;
     });
   }
 
-  // ---------- helpers privados ----------
   #meta(k) {
     const r = this.sql.exec("SELECT v FROM meta WHERE k = ?", k).toArray();
     return r.length ? r[0].v : null;
@@ -147,16 +162,27 @@ export class Registry extends DurableObject {
   #userRow(username) {
     const r = this.sql.exec("SELECT * FROM users WHERE username = ?", username).toArray();
     return r.length ? {
-      username: r[0].username, salt: r[0].salt, iter: r[0].iter, hash: r[0].hash,
-      createdAt: r[0].created_at, pwdVersion: r[0].pwd_version,
+      username: r[0].username,
+      email: r[0].email || "",
+      salt: r[0].salt,
+      iter: r[0].iter,
+      hash: r[0].hash,
+      createdAt: r[0].created_at,
+      pwdVersion: r[0].pwd_version,
       mustChange: !!r[0].must_change
     } : null;
+  }
+  #userByEmail(email) {
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized) return null;
+    const r = this.sql.exec("SELECT * FROM users WHERE LOWER(email) = ?", normalized).toArray();
+    return r.length ? this.#userRow(r[0].username) : null;
   }
   #codeExists(code) {
     return this.sql.exec("SELECT 1 FROM links WHERE code = ?", code).toArray().length > 0;
   }
 
-  // ---------- migración desde KV (una sola vez, por lotes) ----------
+  // ---------- migración desde KV ----------
   #importRaw(phase, raw) {
     let o;
     try { o = JSON.parse(raw); } catch { return 0; }
@@ -165,9 +191,9 @@ export class Registry extends DurableObject {
     if (phase === "users") {
       if (!USERNAME_RE.test(String(o.username || "")) || !o.salt || !o.hash) return 0;
       const r = this.sql.exec(
-        `INSERT OR IGNORE INTO users (username, salt, iter, hash, created_at, pwd_version)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        o.username, o.salt, o.iter || PBKDF2_ITER, o.hash,
+        `INSERT OR IGNORE INTO users (username, email, salt, iter, hash, created_at, pwd_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        o.username, String(o.email || "").trim().toLowerCase(), o.salt, o.iter || PBKDF2_ITER, o.hash,
         o.createdAt || Date.now(), o.pwdChangedAt ? 1 : 0
       );
       return r.rowsWritten > 0 ? 1 : 0;
@@ -183,7 +209,6 @@ export class Registry extends DurableObject {
     return r.rowsWritten > 0 ? 1 : 0;
   }
 
-  // Importa un registro suelto desde KV (para no perder enlaces mientras dura la migración)
   async #pull(phase, key) {
     if (!this.env.app) return false;
     const raw = await this.env.app.get((phase === "users" ? USER_PREFIX : LINK_PREFIX) + key);
@@ -262,9 +287,6 @@ export class Registry extends DurableObject {
       .toArray().map(r => this.#toLink(r));
   }
 
-  // rows: [{ targetUrl, shortCode?, notes }] ya validadas por el Worker.
-  // Devuelve un resultado por fila. La comprobación de "ya existe" y la
-  // inserción ocurren juntas, sin posibilidad de duplicados.
   async createLinks(rows) {
     await this.#ready();
     if (!this.migrated) {
@@ -280,9 +302,10 @@ export class Registry extends DurableObject {
         } else {
           do { code = randomCode(); } while (this.#codeExists(code));
         }
+        const activeVal = r.active === false ? 0 : 1;
         this.sql.exec(
-          "INSERT INTO links (code, target_url, notes, created_at) VALUES (?, ?, ?, ?)",
-          code, r.targetUrl, r.notes || "", now
+          "INSERT INTO links (code, target_url, notes, active, created_at) VALUES (?, ?, ?, ?, ?)",
+          code, r.targetUrl, r.notes || "", activeVal, now
         );
         out.push({ ok: true, link: this.#link(code) });
       }
@@ -306,7 +329,6 @@ export class Registry extends DurableObject {
     return this.#link(code);
   }
 
-  // owner vacío = liberar. Devuelve { ok, link } o { ok:false, error }
   async setOwner(code, owner) {
     await this.#ready();
     if (!this.#link(code)) return { ok: false, error: "Enlace no encontrado" };
@@ -325,22 +347,19 @@ export class Registry extends DurableObject {
     return true;
   }
 
-  // ---------- usuario: reclamar y editar lo suyo ----------
+  // ---------- usuario: enlaces y correo ----------
   async myLinks(username) {
     await this.#ready();
     return this.sql.exec("SELECT * FROM links WHERE owner = ? ORDER BY claimed_at DESC, code ASC", username)
       .toArray().map(r => this.#toLink(r));
   }
 
-  // Solo activos y sin dueño. No se expone la URL destino.
   async available() {
     await this.#ready();
     return this.sql.exec("SELECT code, notes FROM links WHERE active = 1 AND owner IS NULL ORDER BY code ASC")
       .toArray().map(r => ({ id: r.code, shortCode: r.code, notes: r.notes }));
   }
 
-  // RECLAMO ATÓMICO: la lectura y la escritura ocurren sin que ninguna otra
-  // petición pueda intercalarse, así que solo una persona puede ganar.
   async claim(code, username) {
     await this.#ready();
     let result = { ok: false, error: "Este enlace ya no está disponible" };
@@ -362,11 +381,33 @@ export class Registry extends DurableObject {
     return this.#link(code);
   }
 
+  async setUserEmail(username, email) {
+    await this.#ready();
+    if (!this.#userRow(username)) return null;
+    const normalized = String(email || "").trim().toLowerCase();
+    this.sql.exec("UPDATE users SET email = ? WHERE username = ?", normalized, username);
+    return normalized;
+  }
+
   // ---------- usuarios ----------
   async getUser(username) {
     await this.#ready();
     let u = this.#userRow(username);
     if (!u && !this.migrated && await this.#pull("users", username)) u = this.#userRow(username);
+    return u;
+  }
+
+  async findUserForReset(identifier) {
+    await this.#ready();
+    const clean = String(identifier || "").trim().toLowerCase();
+    if (!clean) return null;
+    if (clean.includes("@")) {
+      return this.#userByEmail(clean);
+    }
+    let u = this.#userRow(clean);
+    if (!u && !this.migrated && USERNAME_RE.test(clean) && await this.#pull("users", clean)) {
+      u = this.#userRow(clean);
+    }
     return u;
   }
 
@@ -377,16 +418,14 @@ export class Registry extends DurableObject {
     this.ctx.storage.transactionSync(() => {
       if (this.#userRow(rec.username)) return;
       this.sql.exec(
-        "INSERT INTO users (username, salt, iter, hash, created_at, must_change) VALUES (?, ?, ?, ?, ?, 1)",
-        rec.username, rec.salt, rec.iter, rec.hash, Date.now()
+        "INSERT INTO users (username, email, salt, iter, hash, created_at, must_change) VALUES (?, ?, ?, ?, ?, ?, 1)",
+        rec.username, rec.email || "", rec.salt, rec.iter, rec.hash, Date.now()
       );
       result = { ok: true };
     });
     return result;
   }
 
-  // Cambia la contraseña e incrementa la versión (invalida sesiones anteriores).
-  // mustChange = true cuando la define el administrador (contraseña temporal).
   async setPassword(username, rec, mustChange = false) {
     await this.#ready();
     if (!this.#userRow(username)) return null;
@@ -401,16 +440,19 @@ export class Registry extends DurableObject {
   async listUsers() {
     await this.#ready();
     return this.sql.exec(
-      `SELECT u.username, u.created_at,
+      `SELECT u.username, u.email, u.created_at,
               u.must_change,
               (SELECT COUNT(*) FROM links l WHERE l.owner = u.username) AS links
          FROM users u ORDER BY u.username ASC`
     ).toArray().map(r => ({
-      username: r.username, createdAt: r.created_at, links: r.links, mustChange: !!r.must_change
+      username: r.username,
+      email: r.email || "",
+      createdAt: r.created_at,
+      links: r.links,
+      mustChange: !!r.must_change
     }));
   }
 
-  // Elimina la cuenta y libera sus enlaces en una sola operación atómica
   async deleteUser(username) {
     await this.#ready();
     let result = { ok: false, error: "Usuario no encontrado" };
@@ -418,8 +460,48 @@ export class Registry extends DurableObject {
       if (!this.#userRow(username)) return;
       const released = this.sql.exec("SELECT COUNT(*) AS n FROM links WHERE owner = ?", username).one().n;
       this.sql.exec("UPDATE links SET owner = NULL, claimed_at = NULL WHERE owner = ?", username);
+      this.sql.exec("DELETE FROM password_resets WHERE username = ?", username);
       this.sql.exec("DELETE FROM users WHERE username = ?", username);
       result = { ok: true, released };
+    });
+    return result;
+  }
+
+  // ---------- tokens de recuperación ----------
+  async createResetToken(username, tokenHash, expiresAt) {
+    await this.#ready();
+    const now = Date.now();
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec("DELETE FROM password_resets WHERE expires_at < ? OR used = 1", now);
+      this.sql.exec("UPDATE password_resets SET used = 1 WHERE username = ?", username);
+      this.sql.exec(
+        "INSERT INTO password_resets (token_hash, username, expires_at, used) VALUES (?, ?, ?, 0)",
+        tokenHash, username, expiresAt
+      );
+    });
+  }
+
+  async consumeResetTokenAndSetPassword(tokenHash, rec) {
+    await this.#ready();
+    const now = Date.now();
+    let result = { ok: false, error: "El enlace de recuperación no es válido o ha expirado." };
+    this.ctx.storage.transactionSync(() => {
+      const rows = this.sql.exec(
+        "SELECT username, expires_at, used FROM password_resets WHERE token_hash = ?",
+        tokenHash
+      ).toArray();
+      if (!rows.length) return;
+      const row = rows[0];
+      if (row.used || row.expires_at < now) return;
+      if (!this.#userRow(row.username)) return;
+
+      this.sql.exec("UPDATE password_resets SET used = 1 WHERE token_hash = ?", tokenHash);
+      this.sql.exec(
+        `UPDATE users SET salt = ?, iter = ?, hash = ?, pwd_version = pwd_version + 1, must_change = 0
+          WHERE username = ?`,
+        rec.salt, rec.iter, rec.hash, row.username
+      );
+      result = { ok: true, username: row.username };
     });
     return result;
   }
@@ -452,6 +534,11 @@ function b64urlDecode(s) {
   return atob(s);
 }
 
+async function sha256Hex(data) {
+  const digest = await crypto.subtle.digest("SHA-256", enc.encode(String(data)));
+  return toHex(new Uint8Array(digest));
+}
+
 async function hmacHex(secret, data) {
   const key = await crypto.subtle.importKey(
     "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
@@ -459,7 +546,6 @@ async function hmacHex(secret, data) {
   return toHex(new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(data))));
 }
 
-// Comparación en tiempo constante
 function safeEqual(a, b) {
   a = String(a); b = String(b);
   if (a.length !== b.length) return false;
@@ -485,15 +571,12 @@ async function makePasswordRecord(password) {
 }
 
 // ---------- Tokens de sesión ----------
-// pv = versión de contraseña: al cambiarla, las sesiones anteriores dejan de valer
 async function makeToken(env, username, role, pv = 0) {
   const now = Date.now();
   const payload = b64url(JSON.stringify({ u: username, r: role, pv, iat: now, exp: now + TOKEN_TTL_MS }));
   return payload + "." + await hmacHex(env.TOKEN_SECRET, payload);
 }
 
-// Devuelve { username, role } o null. Para usuarios comprueba que la cuenta
-// siga existiendo y que la contraseña no haya cambiado desde que se emitió.
 async function authenticate(env, token) {
   if (typeof token !== "string") return null;
   const [payload, sig] = token.split(".");
@@ -522,7 +605,6 @@ function parseUrl(input) {
   let s = String(input || "").trim();
   if (!s || s.length > MAX_URL) return null;
   if (!/^https?:\/\//i.test(s)) {
-    // Rechaza otros esquemas (javascript:, data:, ftp://, etc.)
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^(javascript|data|vbscript|file|blob):/i.test(s)) return null;
     s = "https://" + s;
   }
@@ -536,11 +618,17 @@ function parseUrl(input) {
   }
 }
 
+function parseEmailOptional(input) {
+  const e = String(input || "").trim().toLowerCase();
+  if (!e) return "";
+  if (e.length > MAX_EMAIL || !EMAIL_RE.test(e)) return null;
+  return e;
+}
+
 function validPassword(p) {
   return typeof p === "string" && p.length >= 8 && p.length <= 128;
 }
 
-// Valida una fila de enlace. Devuelve { row } o { error }
 function validateLinkRow(input) {
   const targetUrl = parseUrl(input.targetUrl);
   if (!targetUrl) return { error: "La URL destino no es válida (debe ser http o https)" };
@@ -552,11 +640,54 @@ function validateLinkRow(input) {
   if (shortCode && !CODE_RE.test(shortCode)) {
     return { error: "El código solo puede tener letras, números, - y _ (máx. 64)" };
   }
-  return { row: { targetUrl, notes, shortCode } };
+  const active = input.active === false ? false : true;
+  return { row: { targetUrl, notes, shortCode, active } };
+}
+
+// ---------- Envío de correo con Resend ----------
+async function sendResetEmailResend(env, { to, username, resetUrl }) {
+  if (!env.RESEND_API_KEY) {
+    throw new Error("Falta el secret RESEND_API_KEY en el Worker.");
+  }
+  const from = String(env.FROM_EMAIL || env.RESEND_FROM || "").trim();
+  if (!from) {
+    throw new Error("Falta configurar FROM_EMAIL con un remitente verificado en Resend.");
+  }
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: "Recuperación de contraseña - Gestor de Enlaces y QR",
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937; max-width: 520px;">
+          <h2 style="margin-bottom: 8px;">Recuperar contraseña</h2>
+          <p>Hola <b>${escapeHtml(username)}</b>,</p>
+          <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el siguiente botón para crear una nueva contraseña (este enlace vence en 30 minutos):</p>
+          <p style="margin: 24px 0;">
+            <a href="${escapeHtml(resetUrl)}" style="background:#2563eb;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">
+              Restablecer contraseña
+            </a>
+          </p>
+          <p style="font-size: 12px; color: #6b7280;">Si no solicitaste este cambio, puedes ignorar este correo.</p>
+        </div>
+      `
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Resend (${res.status}): ${errText}`);
+  }
 }
 
 // ============================================================
-// PÚBLICO: redirección
+// PÚBLICO: redirección y recuperación de contraseña
 // ============================================================
 async function redirectLookup(env, code) {
   if (!code) return fail("Falta el parámetro ?r=codigo", 400);
@@ -564,6 +695,53 @@ async function redirectLookup(env, code) {
 
   const r = await registry(env).resolve(code);
   return r.ok ? json({ success: true, targetUrl: r.targetUrl }) : fail(r.error, r.status);
+}
+
+async function requestPasswordReset(env, body) {
+  const identifier = String(body.identifier || "").trim();
+  const neutralMsg = "Si el usuario o correo existe y tiene correo configurado, te enviaremos un enlace de recuperación.";
+  if (!identifier) return fail("Ingresa tu usuario o correo electrónico.");
+
+  const reg = registry(env);
+  const user = await reg.findUserForReset(identifier);
+
+  if (user && user.email && EMAIL_RE.test(user.email)) {
+    const rawToken = randomHex(24);
+    const tokenHash = await sha256Hex(rawToken + ":" + String(env.TOKEN_SECRET || ""));
+    const expiresAt = Date.now() + RESET_TTL_MS;
+    await reg.createResetToken(user.username, tokenHash, expiresAt);
+
+    const parsedBase = parseUrl(body.resetBaseUrl) || "";
+    const cleanBase = parsedBase ? parsedBase.split("?")[0] : "";
+    const resetUrl = cleanBase
+      ? `${cleanBase}?reset=${encodeURIComponent(rawToken)}`
+      : `?reset=${encodeURIComponent(rawToken)}`;
+
+    try {
+      await sendResetEmailResend(env, {
+        to: user.email,
+        username: user.username,
+        resetUrl
+      });
+    } catch (err) {
+      console.error("Error enviando correo con Resend:", err);
+      return fail("No se pudo enviar el correo de recuperación en este momento.");
+    }
+  }
+
+  return json({ success: true, message: neutralMsg });
+}
+
+async function resetPassword(env, body) {
+  const rawToken = String(body.token || "").trim();
+  const password = String(body.password || "");
+  if (!rawToken) return fail("Falta el token de recuperación.");
+  if (!validPassword(password)) return fail("La contraseña debe tener entre 8 y 128 caracteres.");
+
+  const tokenHash = await sha256Hex(rawToken + ":" + String(env.TOKEN_SECRET || ""));
+  const rec = await makePasswordRecord(password);
+  const res = await registry(env).consumeResetTokenAndSetPassword(tokenHash, rec);
+  return res.ok ? json({ success: true, username: res.username }) : fail(res.error);
 }
 
 // ============================================================
@@ -586,7 +764,6 @@ async function handleLogin(env, body, ip) {
     if (safeEqual(pass, env.ADMIN_PASS)) { role = "admin"; name = String(env.ADMIN_USER); }
   } else {
     const rec = USERNAME_RE.test(username) ? await reg.getUser(username) : null;
-    // Se calcula el hash siempre para que el tiempo de respuesta no revele si la cuenta existe
     const h = await hashPassword(pass, rec ? rec.salt : DUMMY_SALT, rec ? rec.iter : PBKDF2_ITER);
     if (rec && safeEqual(h, rec.hash)) {
       role = "user"; name = rec.username; pv = rec.pwdVersion; mustChange = rec.mustChange;
@@ -621,7 +798,6 @@ async function adminCreate(env, body) {
   return res.ok ? json({ success: true, data: res.link }) : fail(res.error);
 }
 
-// Importación masiva (CSV): body.rows = [{ line, targetUrl, shortCode, notes }]
 async function adminCreateBulk(env, body) {
   if (!Array.isArray(body.rows) || body.rows.length === 0) return fail("No hay filas para importar");
   if (body.rows.length > MAX_BULK_ROWS) return fail(`Máximo ${MAX_BULK_ROWS} filas por petición`);
@@ -668,7 +844,6 @@ async function adminSetActive(env, body) {
   return link ? json({ success: true, data: link }) : fail("Enlace no encontrado");
 }
 
-// owner vacío = liberar el enlace (queda disponible para reclamar)
 async function adminSetOwner(env, body) {
   const owner = String(body.owner || "").trim().toLowerCase();
   const r = await registry(env).setOwner(String(body.id || ""), owner);
@@ -697,19 +872,33 @@ async function userCreate(env, body) {
   if (safeEqual(username, String(env.ADMIN_USER).toLowerCase())) return fail("Ese nombre de usuario está reservado");
   if (!validPassword(body.password)) return fail("La contraseña debe tener entre 8 y 128 caracteres");
 
-  const r = await registry(env).createUser({ username, ...(await makePasswordRecord(body.password)) });
-  return r.ok ? json({ success: true, username }) : fail(r.error);
+  const email = parseEmailOptional(body.email);
+  if (email === null) return fail("El correo electrónico no es válido");
+
+  const r = await registry(env).createUser({
+    username,
+    email,
+    ...(await makePasswordRecord(body.password))
+  });
+  return r.ok ? json({ success: true, username, email }) : fail(r.error);
+}
+
+async function userUpdateEmail(env, body) {
+  const username = String(body.username || "").trim().toLowerCase();
+  const email = parseEmailOptional(body.email);
+  if (email === null) return fail("El correo electrónico no es válido");
+
+  const saved = await registry(env).setUserEmail(username, email);
+  return saved === null ? fail("Usuario no encontrado") : json({ success: true, username, email: saved });
 }
 
 async function userSetPassword(env, body) {
   if (!validPassword(body.password)) return fail("La contraseña debe tener entre 8 y 128 caracteres");
   const username = String(body.username || "").trim().toLowerCase();
-  // Contraseña temporal: el usuario deberá cambiarla en su próximo inicio de sesión
   const v = await registry(env).setPassword(username, await makePasswordRecord(body.password), true);
   return v === null ? fail("Usuario no encontrado") : json({ success: true });
 }
 
-// Elimina la cuenta y libera sus enlaces (vuelven a estar disponibles)
 async function userDelete(env, body) {
   const r = await registry(env).deleteUser(String(body.username || "").trim().toLowerCase());
   return r.ok ? json({ success: true, released: r.released }) : fail(r.error);
@@ -719,7 +908,16 @@ async function userDelete(env, body) {
 // USUARIO: solo lo suyo
 // ============================================================
 async function myLinks(env, body, auth) {
-  return json({ success: true, data: await registry(env).myLinks(auth.username) });
+  const reg = registry(env);
+  const [data, userRec] = await Promise.all([reg.myLinks(auth.username), reg.getUser(auth.username)]);
+  return json({ success: true, data, email: userRec ? userRec.email : "" });
+}
+
+async function updateOwnEmail(env, body, auth) {
+  const email = parseEmailOptional(body.email);
+  if (email === null || !email) return fail("Ingresa un correo electrónico válido");
+  const saved = await registry(env).setUserEmail(auth.username, email);
+  return saved === null ? fail("No autorizado", 401) : json({ success: true, email: saved });
 }
 
 async function availableLinks(env) {
@@ -731,7 +929,6 @@ async function claimLink(env, body, auth) {
   return r.ok ? json({ success: true, data: r.link }) : fail(r.error);
 }
 
-// Lo ÚNICO que un usuario puede modificar: el destino de sus propios enlaces
 async function updateOwnUrl(env, body, auth) {
   const targetUrl = parseUrl(body.targetUrl);
   if (!targetUrl) return fail("La URL destino no es válida (debe ser http o https)");
@@ -750,7 +947,6 @@ async function changeOwnPassword(env, body, auth) {
   if (body.password === body.current) return fail("La nueva contraseña debe ser diferente a la actual");
 
   const pv = await reg.setPassword(auth.username, await makePasswordRecord(body.password), false);
-  // Se entrega un token nuevo para que la sesión actual siga válida
   return json({ success: true, token: await makeToken(env, auth.username, "user", pv) });
 }
 
@@ -759,24 +955,26 @@ async function changeOwnPassword(env, body, auth) {
 // ============================================================
 const ROUTES = {
   // Administrador
-  migrate:         { roles: ["admin"], fn: adminMigrate },
-  list:            { roles: ["admin"], fn: adminList },
-  create:          { roles: ["admin"], fn: adminCreate },
-  create_bulk:     { roles: ["admin"], fn: adminCreateBulk },
-  update:          { roles: ["admin"], fn: adminUpdate },
-  set_active:      { roles: ["admin"], fn: adminSetActive },
-  set_owner:       { roles: ["admin"], fn: adminSetOwner },
-  delete:          { roles: ["admin"], fn: adminDelete },
-  users_list:      { roles: ["admin"], fn: usersList },
-  user_create:     { roles: ["admin"], fn: userCreate },
-  user_password:   { roles: ["admin"], fn: userSetPassword },
-  user_delete:     { roles: ["admin"], fn: userDelete },
+  migrate:          { roles: ["admin"], fn: adminMigrate },
+  list:             { roles: ["admin"], fn: adminList },
+  create:           { roles: ["admin"], fn: adminCreate },
+  create_bulk:      { roles: ["admin"], fn: adminCreateBulk },
+  update:           { roles: ["admin"], fn: adminUpdate },
+  set_active:       { roles: ["admin"], fn: adminSetActive },
+  set_owner:        { roles: ["admin"], fn: adminSetOwner },
+  delete:           { roles: ["admin"], fn: adminDelete },
+  users_list:       { roles: ["admin"], fn: usersList },
+  user_create:      { roles: ["admin"], fn: userCreate },
+  user_update_email:{ roles: ["admin"], fn: userUpdateEmail },
+  user_password:    { roles: ["admin"], fn: userSetPassword },
+  user_delete:      { roles: ["admin"], fn: userDelete },
   // Usuario
-  my_links:        { roles: ["user"], fn: myLinks },
-  available:       { roles: ["user"], fn: availableLinks },
-  claim:           { roles: ["user"], fn: claimLink },
-  update_url:      { roles: ["user"], fn: updateOwnUrl },
-  change_password: { roles: ["user"], fn: changeOwnPassword }
+  my_links:         { roles: ["user"], fn: myLinks },
+  update_email:     { roles: ["user"], fn: updateOwnEmail },
+  available:        { roles: ["user"], fn: availableLinks },
+  claim:            { roles: ["user"], fn: claimLink },
+  update_url:       { roles: ["user"], fn: updateOwnUrl },
+  change_password:  { roles: ["user"], fn: changeOwnPassword }
 };
 
 // ---------- Entrada principal ----------
@@ -794,7 +992,6 @@ export default {
         return fail("Faltan secrets: ADMIN_USER, ADMIN_PASS y TOKEN_SECRET.", 500);
       }
 
-      // GET público: redirección
       if (request.method === "GET") {
         const code = new URL(request.url).searchParams.get("r");
         return await redirectLookup(env, code);
@@ -811,12 +1008,16 @@ export default {
         const ip = request.headers.get("CF-Connecting-IP") || "unknown";
         return await handleLogin(env, body, ip);
       }
+      if (body.action === "request_password_reset") {
+        return await requestPasswordReset(env, body);
+      }
+      if (body.action === "reset_password") {
+        return await resetPassword(env, body);
+      }
 
-      // Todo lo demás requiere sesión válida
       const auth = await authenticate(env, body.token);
       if (!auth) return json({ success: false, error: "No autorizado", unauthorized: true }, 401);
 
-      // Contraseña temporal: hasta cambiarla, lo único permitido es cambiarla
       if (auth.role === "user" && auth.mustChange && body.action !== "change_password") {
         return json({
           success: false,
