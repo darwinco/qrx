@@ -580,7 +580,9 @@
         const response = await fetch(CONFIG.SCRIPT_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, token: localStorage.getItem("auth_token") || "" })
+          // El token de sesión es solo un valor por defecto: si la petición ya trae su propio
+          // "token" (por ejemplo el de recuperación de contraseña), ese es el que se envía.
+          body: JSON.stringify({ token: localStorage.getItem("auth_token") || "", ...payload })
         });
         const textData = await response.text();
         return JSON.parse(textData);
