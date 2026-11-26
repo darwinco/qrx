@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="googlebot" content="noindex, nofollow">
   <title>Gestor de Enlaces y Códigos QR</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -77,7 +79,7 @@
   </div>
 
   <!-- VISTA DE LOGIN (administrador y usuarios) -->
-  <div id="loginSection" class="flex items-center justify-center min-h-screen">
+  <div id="loginSection" class="flex items-center justify-center min-h-screen p-4">
     <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
       <h2 class="text-2xl font-bold mb-1 text-center text-gray-800">Gestor de Enlaces y Códigos QR</h2>
       <p class="text-center text-gray-500 text-sm mb-6">Inicia sesión para continuar</p>
@@ -89,6 +91,11 @@
         <div>
           <label class="block text-sm font-medium text-gray-700">Contraseña</label>
           <input type="password" id="passInput" required autocomplete="current-password" class="w-full mt-1 p-2 border rounded focus:ring-blue-500">
+        </div>
+        <div class="text-right">
+          <button type="button" onclick="openForgotModal()" class="text-xs text-blue-600 hover:underline font-medium">
+            ¿Olvidaste tu contraseña?
+          </button>
         </div>
         <p id="loginError" class="text-red-500 text-sm hidden"></p>
         <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded font-semibold hover:bg-blue-700">Ingresar</button>
@@ -215,13 +222,14 @@
     <div id="tabUsers" class="hidden">
       <div class="bg-white p-6 rounded-lg shadow mb-8">
         <h3 class="text-lg font-semibold mb-4">Crear Cuenta de Usuario</h3>
-        <form onsubmit="createUser(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <form onsubmit="createUser(event)" class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <input type="text" id="newUsername" placeholder="Usuario (3-32: a-z, 0-9, . _ -)" required minlength="3" maxlength="32" autocomplete="off" class="p-2 border rounded">
+          <input type="email" id="newUserEmail" placeholder="Correo electrónico (recuperación)" autocomplete="email" class="p-2 border rounded">
           <div class="flex gap-2">
             <input type="password" id="newUserPass" placeholder="Contraseña (mínimo 8 caracteres)" required minlength="8" maxlength="128" autocomplete="new-password" class="flex-1 p-2 border rounded">
             <button type="button" onclick="generatePassword('newUserPass')" title="Generar contraseña segura" class="bg-gray-200 px-3 rounded hover:bg-gray-300">🎲</button>
           </div>
-          <button type="submit" class="md:col-span-3 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Crear Usuario</button>
+          <button type="submit" class="bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Crear Usuario</button>
         </form>
       </div>
 
@@ -234,6 +242,7 @@
           <thead>
             <tr class="bg-gray-50 border-b">
               <th class="p-4">Usuario</th>
+              <th class="p-4">Correo</th>
               <th class="p-4">Enlaces asociados</th>
               <th class="p-4">Creado</th>
               <th class="p-4">Acciones</th>
@@ -252,10 +261,13 @@
     <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
       <div>
         <h1 class="text-3xl font-bold text-gray-800">Mis Enlaces y Códigos QR</h1>
-        <p class="text-sm text-gray-500 mt-1">Sesión: <span class="session-name font-semibold"></span></p>
+        <p class="text-sm text-gray-500 mt-1">
+          Sesión: <span class="session-name font-semibold"></span> · Correo: <span id="userProfileEmailLabel" class="font-mono text-gray-700">No registrado</span>
+        </p>
       </div>
       <div class="flex flex-wrap gap-2">
         <button onclick="loadUserData()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">🔄 Actualizar</button>
+        <button onclick="openUserEmailModal()" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Actualizar correo</button>
         <button onclick="openPwdModal(null)" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">Cambiar contraseña</button>
         <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Cerrar Sesión</button>
       </div>
@@ -278,6 +290,55 @@
         </thead>
         <tbody id="myLinksTableBody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- MODAL SOLICITAR RECUPERACIÓN DE CONTRASEÑA -->
+  <div id="forgotPwdModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-lg max-w-sm w-full">
+      <h3 class="text-lg font-bold mb-1">Recuperar contraseña</h3>
+      <p class="text-sm text-gray-500 mb-4">Ingresa tu usuario o correo registrado y te enviaremos un enlace para restablecerla.</p>
+      <form onsubmit="submitForgotPassword(event)" class="space-y-3">
+        <input type="text" id="forgotIdentifier" placeholder="Usuario o correo electrónico" required class="w-full p-2 border rounded">
+        <p id="forgotStatusMsg" class="text-sm hidden"></p>
+        <div class="flex gap-2">
+          <button type="submit" id="forgotSubmitBtn" class="flex-1 bg-blue-600 text-white py-2 rounded font-semibold hover:bg-blue-700">Enviar enlace</button>
+          <button type="button" onclick="closeForgotModal()" class="flex-1 bg-gray-500 text-white py-2 rounded font-semibold">Cerrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL RESTABLECER CONTRASEÑA DESDE ENLACE (?reset=TOKEN) -->
+  <div id="resetPwdModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-lg max-w-sm w-full">
+      <h3 class="text-lg font-bold mb-1">Crear nueva contraseña</h3>
+      <p class="text-sm text-gray-500 mb-4">Escribe tu nueva contraseña para completar la recuperación.</p>
+      <form onsubmit="submitResetPassword(event)" class="space-y-3">
+        <input type="password" id="resetNewPass" placeholder="Nueva contraseña (mínimo 8 caracteres)" required minlength="8" maxlength="128" autocomplete="new-password" class="w-full p-2 border rounded">
+        <input type="password" id="resetConfirmPass" placeholder="Confirmar nueva contraseña" required minlength="8" maxlength="128" autocomplete="new-password" class="w-full p-2 border rounded">
+        <p id="resetPwdError" class="text-red-500 text-sm hidden"></p>
+        <div class="flex gap-2">
+          <button type="submit" class="flex-1 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Guardar contraseña</button>
+          <button type="button" onclick="closeResetModal()" class="flex-1 bg-gray-500 text-white py-2 rounded font-semibold">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL ACTUALIZAR CORREO (USUARIO) -->
+  <div id="userEmailModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-lg max-w-sm w-full">
+      <h3 class="text-lg font-bold mb-1">Actualizar mi correo</h3>
+      <p class="text-sm text-gray-500 mb-4">Este correo se usará para recuperar tu contraseña si la olvidas.</p>
+      <form onsubmit="submitUserEmailModal(event)" class="space-y-3">
+        <input type="email" id="userEmailInput" placeholder="tu@correo.com" required autocomplete="email" class="w-full p-2 border rounded">
+        <p id="userEmailError" class="text-red-500 text-sm hidden"></p>
+        <div class="flex gap-2">
+          <button type="submit" class="flex-1 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Guardar</button>
+          <button type="button" onclick="closeUserEmailModal()" class="flex-1 bg-gray-500 text-white py-2 rounded font-semibold">Cancelar</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -371,17 +432,17 @@
           <div class="bg-gray-50 p-3 rounded border space-y-2">
             <div class="flex justify-between items-center">
               <label for="qrScaleRange" class="text-sm font-semibold text-gray-700">2. Tamaño del QR</label>
-              <span id="qrScaleValue" class="text-xs font-mono text-gray-600">25%</span>
+              <span id="qrScaleValue" class="text-xs font-mono text-gray-600">29.0%</span>
             </div>
-            <input type="range" id="qrScaleRange" min="10" max="60" step="0.5" value="25" oninput="updateQrScale(this.value)" class="w-full">
+            <input type="range" id="qrScaleRange" min="10" max="60" step="0.5" value="29" oninput="updateQrScale(this.value)" class="w-full">
             <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 pt-1">
               <label class="flex flex-col gap-1">
                 <span>Posición X (%)</span>
-                <input type="number" id="qrPosXInput" min="5" max="95" step="0.1" value="75.0" onchange="updateQrPosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
+                <input type="number" id="qrPosXInput" min="5" max="95" step="0.1" value="50.2" onchange="updateQrPosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
               </label>
               <label class="flex flex-col gap-1">
                 <span>Posición Y (%)</span>
-                <input type="number" id="qrPosYInput" min="5" max="95" step="0.1" value="71.0" onchange="updateQrPosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
+                <input type="number" id="qrPosYInput" min="5" max="95" step="0.1" value="56.3" onchange="updateQrPosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
               </label>
             </div>
           </div>
@@ -410,11 +471,11 @@
             <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 pt-1">
               <label class="flex flex-col gap-1">
                 <span>Posición X (%)</span>
-                <input type="number" id="codePosXInput" min="5" max="95" step="0.1" value="75.0" onchange="updateCodePosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
+                <input type="number" id="codePosXInput" min="5" max="95" step="0.1" value="50.0" onchange="updateCodePosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
               </label>
               <label class="flex flex-col gap-1">
                 <span>Posición Y (%)</span>
-                <input type="number" id="codePosYInput" min="3" max="97" step="0.1" value="83.0" onchange="updateCodePosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
+                <input type="number" id="codePosYInput" min="3" max="97" step="0.1" value="90.0" onchange="updateCodePosInput()" class="w-full px-2 py-1 border rounded bg-white font-mono text-gray-800">
               </label>
             </div>
           </div>
@@ -455,6 +516,7 @@
     const baseUrl = window.location.href.split('?')[0];
     const urlParams = new URLSearchParams(window.location.search);
     const redirectCode = urlParams.get('r');
+    const resetTokenParam = urlParams.get('reset');
 
     let allLinksData = [];
     let filteredLinksData = [];
@@ -462,6 +524,7 @@
     let pageSize = 10; // 10, 50, 100, 200, 300 o "all"
     let allUsersData = [];
     let myLinksData = [];
+    let myEmail = "";
     let tempPassword = null; // contraseña temporal escrita en el login (solo memoria)
     let pwdTarget = null; // null = mi propia contraseña; texto = usuario (acción del administrador)
 
@@ -479,6 +542,8 @@
       initTemplateEditor();
       if (redirectCode) {
         handleRedirect(redirectCode);
+      } else if (resetTokenParam) {
+        openResetModal();
       } else if (localStorage.getItem("auth_token")) {
         showPanel();
       }
@@ -603,6 +668,90 @@
         if (!res.success || res.done) break;
       }
       return true;
+    }
+
+    // =========================================================================
+    // RECUPERACIÓN DE CONTRASEÑA (RESEND)
+    // =========================================================================
+    function openForgotModal() {
+      document.getElementById("forgotIdentifier").value = "";
+      const msg = document.getElementById("forgotStatusMsg");
+      msg.classList.add("hidden");
+      msg.textContent = "";
+      document.getElementById("forgotSubmitBtn").disabled = false;
+      document.getElementById("forgotPwdModal").classList.remove("hidden");
+    }
+
+    function closeForgotModal() {
+      document.getElementById("forgotPwdModal").classList.add("hidden");
+    }
+
+    async function submitForgotPassword(e) {
+      e.preventDefault();
+      const identifier = document.getElementById("forgotIdentifier").value.trim();
+      const btn = document.getElementById("forgotSubmitBtn");
+      const msg = document.getElementById("forgotStatusMsg");
+      if (!identifier) return;
+
+      btn.disabled = true;
+      msg.classList.remove("hidden", "text-red-600", "text-green-700");
+      msg.classList.add("text-gray-600");
+      msg.textContent = "Enviando solicitud...";
+
+      const res = await apiRequest({
+        action: "request_password_reset",
+        identifier,
+        resetBaseUrl: baseUrl
+      });
+
+      btn.disabled = false;
+      msg.classList.remove("text-gray-600");
+      if (res.success) {
+        msg.classList.add("text-green-700");
+        msg.textContent = res.message || "Si el usuario o correo existe y tiene correo configurado, recibirás un enlace de recuperación.";
+      } else {
+        msg.classList.add("text-red-600");
+        msg.textContent = res.error || "No se pudo procesar la solicitud.";
+      }
+    }
+
+    function openResetModal() {
+      document.getElementById("resetNewPass").value = "";
+      document.getElementById("resetConfirmPass").value = "";
+      document.getElementById("resetPwdError").classList.add("hidden");
+      document.getElementById("resetPwdModal").classList.remove("hidden");
+    }
+
+    function closeResetModal() {
+      document.getElementById("resetPwdModal").classList.add("hidden");
+      window.history.replaceState({}, document.title, baseUrl);
+    }
+
+    async function submitResetPassword(e) {
+      e.preventDefault();
+      const p1 = document.getElementById("resetNewPass").value;
+      const p2 = document.getElementById("resetConfirmPass").value;
+      const err = document.getElementById("resetPwdError");
+
+      if (p1 !== p2) {
+        err.textContent = "Las contraseñas no coinciden.";
+        err.classList.remove("hidden");
+        return;
+      }
+
+      const res = await apiRequest({
+        action: "reset_password",
+        token: resetTokenParam,
+        password: p1
+      });
+
+      if (res.success) {
+        closeResetModal();
+        alert("Tu contraseña se actualizó correctamente. Ya puedes iniciar sesión.");
+      } else {
+        err.textContent = res.error || "El enlace no es válido o ha expirado.";
+        err.classList.remove("hidden");
+      }
     }
 
     // =========================================================================
@@ -891,15 +1040,17 @@
       allUsersData = res.data;
       const tbody = document.getElementById("usersTableBody");
       if (allUsersData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-gray-500">Aún no hay usuarios. Crea el primero arriba.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-gray-500">Aún no hay usuarios. Crea el primero arriba.</td></tr>`;
         return;
       }
       tbody.innerHTML = allUsersData.map(u => `
         <tr class="border-b hover:bg-gray-50">
           <td class="p-4 font-semibold">${esc(u.username)}${u.mustChange ? ' <span class="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700" title="Aún no ha cambiado su contraseña temporal">Contraseña temporal</span>' : ""}</td>
+          <td class="p-4 text-sm font-mono text-gray-700">${u.email ? esc(u.email) : '<span class="text-gray-400 font-sans">Sin correo</span>'}</td>
           <td class="p-4">${esc(u.links)}</td>
           <td class="p-4 text-sm text-gray-600">${u.createdAt ? esc(new Date(u.createdAt).toLocaleString()) : "—"}</td>
           <td class="p-4 space-x-2 whitespace-nowrap">
+            <button data-user="${esc(u.username)}" onclick="editUserEmail(this.dataset.user)" class="bg-indigo-500 text-white px-2 py-1 rounded text-sm">Editar correo</button>
             <button data-user="${esc(u.username)}" onclick="openPwdModal(this.dataset.user)" class="bg-yellow-500 text-white px-2 py-1 rounded text-sm">Cambiar contraseña</button>
             <button data-user="${esc(u.username)}" onclick="deleteUser(this.dataset.user)" class="bg-red-500 text-white px-2 py-1 rounded text-sm">Eliminar</button>
           </td>
@@ -910,12 +1061,14 @@
     async function createUser(e) {
       e.preventDefault();
       const username = document.getElementById("newUsername").value;
+      const email = document.getElementById("newUserEmail").value.trim();
       const password = document.getElementById("newUserPass").value;
 
-      const res = await apiRequest({ action: "user_create", username, password });
+      const res = await apiRequest({ action: "user_create", username, email, password });
       if (checkAuth(res)) return;
       if (res.success) {
         document.getElementById("newUsername").value = "";
+        document.getElementById("newUserEmail").value = "";
         const passInput = document.getElementById("newUserPass");
         passInput.value = "";
         passInput.type = "password";
@@ -926,10 +1079,22 @@
       }
     }
 
+    async function editUserEmail(username) {
+      const u = allUsersData.find(x => x.username === username);
+      const currentEmail = (u && u.email) ? u.email : "";
+      const nextEmail = prompt(`Correo electrónico para "${username}" (déjalo vacío para quitarlo):`, currentEmail);
+      if (nextEmail === null) return;
+
+      const res = await apiRequest({ action: "user_update_email", username, email: nextEmail.trim() });
+      if (checkAuth(res)) return;
+      if (!res.success) return alert("Error: " + res.error);
+      loadUsers();
+    }
+
     async function deleteUser(username) {
       const u = allUsersData.find(x => x.username === username);
       const extra = u && u.links > 0 ? `\nSus ${u.links} enlace(s) quedarán sin propietario.` : "";
-      if (!confirm(`¿Eliminar al usuario "${username}"?${extra}`)) return;
+      if (!confirm(`¿Estás seguro de eliminar al usuario "${username}"?${extra}`)) return;
 
       const res = await apiRequest({ action: "user_delete", username });
       if (checkAuth(res)) return;
@@ -973,6 +1138,11 @@
         err.classList.remove("hidden");
         return;
       }
+
+      if (pwdTarget) {
+        if (!confirm(`¿Estás seguro de cambiar la contraseña del usuario "${pwdTarget}"?`)) return;
+      }
+
       const res = pwdTarget
         ? await apiRequest({ action: "user_password", username: pwdTarget, password })
         : await apiRequest({ action: "change_password", current: document.getElementById("pwdCurrent").value, password });
@@ -998,12 +1168,41 @@
     }
 
     // =========================================================================
-    // USUARIO: GESTIONAR SUS ENLACES
+    // USUARIO: CORREO Y GESTIÓN DE SUS ENLACES
     // =========================================================================
+    function openUserEmailModal() {
+      document.getElementById("userEmailInput").value = myEmail || "";
+      document.getElementById("userEmailError").classList.add("hidden");
+      document.getElementById("userEmailModal").classList.remove("hidden");
+    }
+
+    function closeUserEmailModal() {
+      document.getElementById("userEmailModal").classList.add("hidden");
+    }
+
+    async function submitUserEmailModal(e) {
+      e.preventDefault();
+      const email = document.getElementById("userEmailInput").value.trim();
+      const err = document.getElementById("userEmailError");
+      const res = await apiRequest({ action: "update_email", email });
+      if (checkAuth(res)) return;
+      if (res.success) {
+        myEmail = res.email || email;
+        document.getElementById("userProfileEmailLabel").textContent = myEmail || "No registrado";
+        closeUserEmailModal();
+        alert("Correo actualizado.");
+      } else {
+        err.textContent = res.error || "No se pudo actualizar el correo.";
+        err.classList.remove("hidden");
+      }
+    }
+
     async function loadUserData() {
       const mine = await apiRequest({ action: "my_links" });
       if (checkAuth(mine)) return;
       if (!mine.success) return alert("Error: " + mine.error);
+      myEmail = mine.email || "";
+      document.getElementById("userProfileEmailLabel").textContent = myEmail || "No registrado";
       renderMyLinks(mine.data);
     }
 
@@ -1066,8 +1265,6 @@
         .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
     }
 
-    // Lector CSV: comillas, comillas escapadas (""), saltos de línea dentro de comillas,
-    // BOM y separador automático (coma, punto y coma o tabulador).
     function parseCSV(text) {
       if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
       const firstLine = text.split(/\r?\n/, 1)[0];
@@ -1093,7 +1290,6 @@
       }
       if (field !== "" || row.length) { row.push(field); rows.push(row); }
 
-      // line = número de fila en el archivo (como lo ve el usuario en Excel)
       return rows
         .map((cells, i) => ({ cells: cells.map(c => c.trim()), line: i + 1 }))
         .filter(r => r.cells.some(c => c !== ""));
@@ -1133,7 +1329,6 @@
         fr.onerror = reject;
         fr.readAsText(file, encoding);
       });
-      // Excel en Windows suele guardar en Windows-1252: si se ven caracteres rotos, se relee así
       read("utf-8").then(text => (text.includes("\uFFFD") ? read("windows-1252") : text)).then(showCsvPreview);
     }
 
@@ -1227,7 +1422,6 @@
       loadLinks();
     }
 
-    // Evita que Excel interprete un valor como fórmula (=, +, -, @)
     function csvCell(v) {
       let t = String(v ?? "");
       if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
@@ -1265,17 +1459,16 @@
     // =========================================================================
     let credData = null;
 
-    // 12 caracteres sin letras ambiguas (I, O, l, o, 0, 1); muestreo sin sesgo
     function generatePassword(inputId) {
-      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; // 56 símbolos
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
       let out = "";
       while (out.length < 12) {
         const b = crypto.getRandomValues(new Uint8Array(1))[0];
-        if (b < 224) out += alphabet[b % 56]; // 224 = 56 × 4 → sin sesgo
+        if (b < 224) out += alphabet[b % 56];
       }
       const input = document.getElementById(inputId);
       input.value = out;
-      input.type = "text"; // visible para que el administrador la vea
+      input.type = "text";
     }
 
     function openCredModal(username, password) {
@@ -1303,7 +1496,7 @@
 
     function whatsappNumber(raw) {
       let digits = String(raw || "").replace(/\D/g, "");
-      if (digits.length === 10 && digits.startsWith("3")) digits = "57" + digits; // celular colombiano
+      if (digits.length === 10 && digits.startsWith("3")) digits = "57" + digits;
       return digits;
     }
 
@@ -1389,13 +1582,13 @@
     const DEFAULT_TEMPLATE_CONFIG = {
       src: "boceto.jpg",
       sourceName: "boceto.jpg (por defecto)",
-      qrX: 0.75,        // Centro X del QR (proporción 0..1 del ancho real)
-      qrY: 0.71,        // Centro Y del QR (proporción 0..1 del alto real)
-      qrScale: 0.25,    // Tamaño total del cuadro QR (con borde blanco) respecto al ancho
-      showCode: true,   // Mostrar u ocultar el código corto
-      codeX: 0.75,      // Centro X del texto (anclado debajo del QR por defecto)
-      codeY: 0.83,      // Centro Y del texto
-      codeScale: 0.033, // Tamaño de fuente respecto al ancho real (40px en 1200px)
+      qrX: 0.502,       // Centro X del QR (50.2%)
+      qrY: 0.563,       // Centro Y del QR (56.3%)
+      qrScale: 0.29,    // Tamaño total del cuadro QR (29.0%)
+      showCode: true,   // Mostrar código corto
+      codeX: 0.500,     // Centro X del texto (50.0%)
+      codeY: 0.900,     // Centro Y del texto (90.0%)
+      codeScale: 0.033, // Tamaño de fuente (3.3%)
       codeColor: "#999999"
     };
 
@@ -1509,7 +1702,6 @@
       document.getElementById("codePosYInput").value = (templateConfig.codeY * 100).toFixed(1);
     }
 
-    // Mantiene la vista previa exactamente proporcional al renderizado final en <canvas>
     function syncModalOverlay() {
       const img = document.getElementById("templatePreviewImg");
       const qrBox = document.getElementById("modalQrBox");
@@ -1523,7 +1715,7 @@
 
       if (displayW > 0) {
         const boxSizePx = displayW * templateConfig.qrScale;
-        const padPx = Math.max(2, boxSizePx * (10 / 316)); // mismo margen blanco proporcional que en canvas
+        const padPx = Math.max(2, boxSizePx * (10 / 316));
         qrBox.style.width = `${boxSizePx}px`;
         qrBox.style.height = `${boxSizePx}px`;
         qrBox.style.padding = `${padPx}px`;
@@ -1600,7 +1792,6 @@
       reader.onload = () => {
         const img = new Image();
         img.onload = () => {
-          // Redimensiona si es muy grande para asegurar compatibilidad con el límite de localStorage (~5 MB)
           const MAX_SIDE = 1600;
           let w = img.naturalWidth;
           let h = img.naturalHeight;
@@ -1614,7 +1805,6 @@
           c.height = h;
           c.getContext("2d").drawImage(img, 0, 0, w, h);
 
-          // Conserva PNG si tiene transparencia o es liviano; si es muy pesado usa JPEG de alta calidad
           let dataUrl = c.toDataURL("image/png");
           if (dataUrl.length > 2_500_000) {
             dataUrl = c.toDataURL("image/jpeg", 0.9);
@@ -1668,9 +1858,6 @@
       requestAnimationFrame(syncModalOverlay);
     }
 
-    // =========================================================================
-    // EXPORTACIÓN USANDO COORDENADAS PROPORCIONALES SINCRONIZADAS CON LA VISTA PREVIA
-    // =========================================================================
     function downloadIntegratedTemplate(url, code) {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
@@ -1688,10 +1875,8 @@
         canvas.width = imgWidth;
         canvas.height = imgHeight;
 
-        // 1. Dibujar la plantilla base a resolución nativa
         ctx.drawImage(templateImg, 0, 0, imgWidth, imgHeight);
 
-        // 2. Generar QR de alta resolución temporalmente
         const tempDiv = document.createElement("div");
         document.body.appendChild(tempDiv);
         new QRCode(tempDiv, { text: url, width: 600, height: 600 });
@@ -1701,7 +1886,6 @@
           const qrImg = tempDiv.querySelector("img");
 
           const proceedDrawing = (qrSource) => {
-            // Medidas sincronizadas exactamente con syncModalOverlay()
             const totalBoxSize = imgWidth * templateConfig.qrScale;
             const pad = totalBoxSize * (10 / 316);
             const qrInnerSize = totalBoxSize - pad * 2;
@@ -1709,14 +1893,10 @@
             const boxLeft = (imgWidth * templateConfig.qrX) - (totalBoxSize / 2);
             const boxTop = (imgHeight * templateConfig.qrY) - (totalBoxSize / 2);
 
-            // Fondo blanco del cuadro QR
             ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(boxLeft, boxTop, totalBoxSize, totalBoxSize);
-
-            // Dibujar QR dentro del margen blanco
             ctx.drawImage(qrSource, boxLeft + pad, boxTop + pad, qrInnerSize, qrInnerSize);
 
-            // 3. Dibujar el código corto si está activo
             if (templateConfig.showCode) {
               const fontSize = Math.round(imgWidth * templateConfig.codeScale);
               ctx.fillStyle = templateConfig.codeColor;
@@ -1729,7 +1909,6 @@
               ctx.fillText(code, textX, textY);
             }
 
-            // 4. Descargar la imagen resultante
             const pngUrl = canvas.toDataURL("image/png");
             const downloadLink = document.createElement("a");
             downloadLink.href = pngUrl;
