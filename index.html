@@ -517,7 +517,7 @@
 
     // URL pública fija que se codifica en los QR (no depende de la barra de direcciones).
     // Se puede sobrescribir con CONFIG.PUBLIC_BASE_URL en config.js.
-    const PUBLIC_BASE_URL = (typeof CONFIG !== "undefined" && CONFIG.PUBLIC_BASE_URL) || "https://aa.vip/";
+    const PUBLIC_BASE_URL = (typeof CONFIG !== "undefined" && CONFIG.PUBLIC_BASE_URL) || "https://aa.com/";
 
     // Construye la URL corta con new URL(): siempre ASCII, con https:// y sin hash ni parámetros ajenos.
     function buildShortUrl(code) {
