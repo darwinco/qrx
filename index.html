@@ -1558,7 +1558,7 @@
 
         const saveFromSource = (src) => {
           const size = 512;
-          const pad = 64;
+          const pad = 24;
           const canvas = document.createElement("canvas");
           canvas.width = size + pad * 2;
           canvas.height = size + pad * 2;
@@ -1730,7 +1730,7 @@
 
       if (displayW > 0) {
         const boxSizePx = displayW * templateConfig.qrScale;
-        const padPx = Math.max(2, boxSizePx * (30 / 316));
+        const padPx = Math.max(2, boxSizePx * (14 / 316));
         qrBox.style.width = `${boxSizePx}px`;
         qrBox.style.height = `${boxSizePx}px`;
         qrBox.style.padding = `${padPx}px`;
@@ -1902,7 +1902,7 @@
 
           const proceedDrawing = (qrSource) => {
             const totalBoxSize = imgWidth * templateConfig.qrScale;
-            const pad = totalBoxSize * (30 / 316);
+            const pad = totalBoxSize * (14 / 316);
             const qrInnerSize = totalBoxSize - pad * 2;
 
             const boxLeft = (imgWidth * templateConfig.qrX) - (totalBoxSize / 2);
