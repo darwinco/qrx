@@ -514,6 +514,19 @@
 
   <script>
     const baseUrl = window.location.href.split('?')[0];
+
+    // URL pública fija que se codifica en los QR (no depende de la barra de direcciones).
+    // Se puede sobrescribir con CONFIG.PUBLIC_BASE_URL en config.js.
+    const PUBLIC_BASE_URL = (typeof CONFIG !== "undefined" && CONFIG.PUBLIC_BASE_URL) || "https://app.calificaengoogle.vip/";
+
+    // Construye la URL corta con new URL(): siempre ASCII, con https:// y sin hash ni parámetros ajenos.
+    function buildShortUrl(code) {
+      const u = new URL(PUBLIC_BASE_URL);
+      u.search = "";
+      u.hash = "";
+      u.searchParams.set("r", code);
+      return u.href;
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const redirectCode = urlParams.get('r');
     const resetTokenParam = urlParams.get('reset');
@@ -866,7 +879,7 @@
       const pageItems = links.slice(startIdx, startIdx + perPage);
 
       tbody.innerHTML = pageItems.map(link => {
-        const shortUrl = `${baseUrl}?r=${encodeURIComponent(link.shortCode)}`;
+        const shortUrl = buildShortUrl(link.shortCode);
         const owner = link.owner
           ? `<span class="font-semibold">${esc(link.owner)}</span>`
           : '<span class="text-gray-400">Sin asignar</span>';
@@ -1216,7 +1229,7 @@
         return;
       }
       tbody.innerHTML = list.map(link => {
-        const shortUrl = `${baseUrl}?r=${encodeURIComponent(link.shortCode)}`;
+        const shortUrl = buildShortUrl(link.shortCode);
         return `
           <tr class="border-b hover:bg-gray-50">
             <td class="p-4 font-mono text-blue-600"><a href="${esc(shortUrl)}" target="_blank" rel="noopener">${esc(link.shortCode)}</a></td>
@@ -1525,7 +1538,7 @@
       const container = document.getElementById("userQrcodeBox");
       container.innerHTML = "";
       document.getElementById("userQrCodeLabel").textContent = code;
-      new QRCode(container, { text: url, width: 220, height: 220 });
+      new QRCode(container, { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
       document.getElementById("userQrDownloadBtn").onclick = () => downloadPlainQR(url, code);
       document.getElementById("userQrModal").classList.remove("hidden");
     }
@@ -1537,7 +1550,7 @@
     function downloadPlainQR(url, code) {
       const tempDiv = document.createElement("div");
       document.body.appendChild(tempDiv);
-      new QRCode(tempDiv, { text: url, width: 512, height: 512 });
+      new QRCode(tempDiv, { text: url, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
 
       setTimeout(() => {
         const qrCanvas = tempDiv.querySelector("canvas");
@@ -1545,7 +1558,7 @@
 
         const saveFromSource = (src) => {
           const size = 512;
-          const pad = 24;
+          const pad = 64;
           const canvas = document.createElement("canvas");
           canvas.width = size + pad * 2;
           canvas.height = size + pad * 2;
@@ -1717,7 +1730,7 @@
 
       if (displayW > 0) {
         const boxSizePx = displayW * templateConfig.qrScale;
-        const padPx = Math.max(2, boxSizePx * (10 / 316));
+        const padPx = Math.max(2, boxSizePx * (30 / 316));
         qrBox.style.width = `${boxSizePx}px`;
         qrBox.style.height = `${boxSizePx}px`;
         qrBox.style.padding = `${padPx}px`;
@@ -1846,7 +1859,7 @@
       container.innerHTML = "";
       document.getElementById("modalShortCodeText").innerText = code;
 
-      new QRCode(container, { text: url, width: 400, height: 400 });
+      new QRCode(container, { text: url, width: 400, height: 400, correctLevel: QRCode.CorrectLevel.M });
 
       const previewImg = document.getElementById("templatePreviewImg");
       if (previewImg.getAttribute("src") !== templateConfig.src) {
@@ -1881,7 +1894,7 @@
 
         const tempDiv = document.createElement("div");
         document.body.appendChild(tempDiv);
-        new QRCode(tempDiv, { text: url, width: 600, height: 600 });
+        new QRCode(tempDiv, { text: url, width: 600, height: 600, correctLevel: QRCode.CorrectLevel.M });
 
         setTimeout(() => {
           const qrCanvas = tempDiv.querySelector("canvas");
@@ -1889,7 +1902,7 @@
 
           const proceedDrawing = (qrSource) => {
             const totalBoxSize = imgWidth * templateConfig.qrScale;
-            const pad = totalBoxSize * (10 / 316);
+            const pad = totalBoxSize * (30 / 316);
             const qrInnerSize = totalBoxSize - pad * 2;
 
             const boxLeft = (imgWidth * templateConfig.qrX) - (totalBoxSize / 2);
