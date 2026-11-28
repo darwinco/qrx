@@ -8,6 +8,7 @@
   <title>Gestor de Enlaces y Códigos QR</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="config.js"></script>
   <style>
     .template-container {
@@ -173,6 +174,7 @@
           <button onclick="deleteSelectedLinks()" class="bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700 text-sm shadow">Eliminar Seleccionados</button>
           <button onclick="setActiveSelected(true)" class="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 text-sm shadow">Activar Seleccionados</button>
           <button onclick="setActiveSelected(false)" class="bg-gray-600 text-white px-4 py-2 rounded font-semibold hover:bg-gray-700 text-sm shadow">Desactivar Seleccionados</button>
+          <button onclick="openBatchZipModal()" class="bg-purple-600 text-white px-4 py-2 rounded font-semibold hover:bg-purple-700 text-sm shadow">📦 Descargar ZIP</button>
           <button onclick="exportLinksCsv()" class="bg-teal-600 text-white px-4 py-2 rounded font-semibold hover:bg-teal-700 text-sm shadow">📊 Exportar CSV</button>
           <button onclick="loadLinks()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow flex items-center gap-1">
             🔄 Actualizar
@@ -424,6 +426,91 @@
     </div>
   </div>
 
+  <!-- MODAL DESCARGA MASIVA EN ZIP (SELECCIONADOS O POR CUPO DE CONSECUTIVO) -->
+  <div id="batchZipModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-lg max-w-md w-full shadow-xl">
+      <div class="flex justify-between items-center mb-3 border-b pb-2">
+        <h3 class="text-lg font-bold text-gray-800">Descargar Placas en ZIP</h3>
+        <button type="button" onclick="closeBatchZipModal()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none px-1">&times;</button>
+      </div>
+      <p class="text-xs text-gray-500 mb-4">
+        Genera todas las placas en un único archivo <b>.zip</b>. Cada imagen se guarda con el nombre de su código corto (ej. <span class="font-mono">abc123.png</span>).
+      </p>
+
+      <div class="space-y-4 text-sm">
+        <div>
+          <label for="zipSketchSelect" class="block font-semibold text-gray-700 mb-1">1. Boceto a utilizar (con su configuración guardada)</label>
+          <select id="zipSketchSelect" class="w-full p-2 border rounded bg-white font-mono text-gray-800">
+            <option value="1">boceto1.jpg</option>
+            <option value="2">boceto2.jpg</option>
+            <option value="3">boceto3.jpg</option>
+            <option value="4">boceto4.jpg</option>
+            <option value="5">boceto5.jpg</option>
+            <option value="6">boceto6.jpg</option>
+            <option value="7">boceto7.jpg</option>
+            <option value="8">boceto8.jpg</option>
+            <option value="9">boceto9.jpg</option>
+            <option value="10">boceto10.jpg</option>
+            <option value="11">boceto11.jpg</option>
+          </select>
+        </div>
+
+        <div class="space-y-2">
+          <span class="block font-semibold text-gray-700">2. ¿Qué enlaces incluir?</span>
+
+          <label class="flex items-start gap-2 p-2.5 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="radio" name="zipMode" value="selected" onchange="updateZipModeUI()" class="mt-0.5 text-purple-600">
+            <div>
+              <span class="font-semibold text-gray-800">Enlace(s) seleccionado(s) en la tabla</span>
+              <p id="zipSelectedHint" class="text-xs text-gray-500">0 seleccionado(s)</p>
+            </div>
+          </label>
+
+          <label class="flex items-start gap-2 p-2.5 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="radio" name="zipMode" value="range" checked onchange="updateZipModeUI()" class="mt-0.5 text-purple-600">
+            <div class="w-full">
+              <span class="font-semibold text-gray-800">Por cupo de consecutivo</span>
+              <p id="zipTotalRangeHint" class="text-xs text-gray-500 mb-2">Disponibles: #1 al #1</p>
+              <div id="zipRangeInputs" class="grid grid-cols-2 gap-2">
+                <label class="flex flex-col text-xs text-gray-600">
+                  <span>Desde (#)</span>
+                  <input type="number" id="zipFromSeq" min="1" value="1" oninput="updateZipSummary()" class="mt-1 p-1.5 border rounded font-mono text-gray-800">
+                </label>
+                <label class="flex flex-col text-xs text-gray-600">
+                  <span>Hasta (#)</span>
+                  <input type="number" id="zipToSeq" min="1" value="100" oninput="updateZipSummary()" class="mt-1 p-1.5 border rounded font-mono text-gray-800">
+                </label>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div id="zipSummaryBox" class="p-2.5 rounded bg-purple-50 border border-purple-200 text-xs text-purple-900 font-medium">
+          Se incluirán 0 placa(s).
+        </div>
+
+        <div id="zipProgressWrap" class="hidden space-y-1.5">
+          <div class="flex justify-between text-xs text-gray-600">
+            <span id="zipProgressText">Preparando...</span>
+            <span id="zipProgressPct" class="font-mono font-semibold">0%</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+            <div id="zipProgressBar" class="bg-purple-600 h-2.5 transition-all duration-150" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2 pt-1">
+          <button type="button" id="zipStartBtn" onclick="startBatchZipDownload()" class="bg-purple-600 text-white py-2.5 rounded font-bold hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed">
+            📦 Generar y Descargar ZIP
+          </button>
+          <button type="button" id="zipCancelBtn" onclick="closeBatchZipModal()" class="bg-gray-500 text-white py-2 rounded font-semibold hover:bg-gray-600">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL PERSONALIZAR Y EXPORTAR PLANTILLA CON QR (ADMINISTRADOR) -->
   <div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
     <div class="bg-white p-6 rounded-lg max-w-4xl w-full relative my-auto shadow-xl">
@@ -574,10 +661,9 @@
     let allUsersData = [];
     let myLinksData = [];
     let myEmail = "";
-    let tempPassword = null; // contraseña temporal escrita en el login (solo memoria)
-    let pwdTarget = null; // null = mi propia contraseña; texto = usuario (acción del administrador)
+    let tempPassword = null;
+    let pwdTarget = null;
 
-    // Escapa texto antes de insertarlo en el HTML (evita inyección de código)
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, c => (
         { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]
@@ -588,7 +674,7 @@
 
     window.onload = () => {
       document.getElementById("redirectHomeLink").href = baseUrl;
-      localStorage.removeItem("admin_token"); // sesión del formato anterior
+      localStorage.removeItem("admin_token");
       initTemplateEditor();
       if (redirectCode) {
         handleRedirect(redirectCode);
@@ -654,7 +740,6 @@
       }
     }
 
-    // Si la sesión venció o fue invalidada, vuelve al login
     function checkAuth(res) {
       if (res && res.unauthorized) { logout(); return true; }
       if (res && res.mustChange) { forcePasswordChange(); return true; }
@@ -832,7 +917,6 @@
       if (isLinks) loadLinks(); else loadUsers();
     }
 
-    // Asigna un consecutivo único de 1..N según el orden real de creación
     function assignCreationConsecutives(links) {
       const byCreation = [...links].sort((a, b) => {
         const ca = Number(a.createdAt) || 0;
@@ -1793,7 +1877,6 @@
           return registryState;
         }
 
-        // Migra ajuste previo si existía en la versión anterior
         const legacyRaw = localStorage.getItem(LEGACY_TEMPLATE_KEY);
         if (legacyRaw) {
           const legacy = JSON.parse(legacyRaw);
@@ -2083,36 +2166,30 @@
       requestAnimationFrame(syncModalOverlay);
     }
 
-    function downloadIntegratedTemplate(url, code) {
-      const cfg = getActiveSketch();
-      const imgSrc = getSketchImageSrc(cfg);
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      const templateImg = new Image();
-      if (!imgSrc.startsWith("data:")) {
-        templateImg.crossOrigin = "anonymous";
-      }
-      templateImg.src = imgSrc;
-
-      templateImg.onload = () => {
+    function drawTemplateToCanvas(canvas, ctx, templateImg, cfg, url, code) {
+      return new Promise((resolve, reject) => {
         const imgWidth = templateImg.naturalWidth || 1200;
         const imgHeight = templateImg.naturalHeight || 1600;
-
         canvas.width = imgWidth;
         canvas.height = imgHeight;
-
+        ctx.clearRect(0, 0, imgWidth, imgHeight);
         ctx.drawImage(templateImg, 0, 0, imgWidth, imgHeight);
 
         const tempDiv = document.createElement("div");
+        tempDiv.style.position = "fixed";
+        tempDiv.style.left = "-9999px";
         document.body.appendChild(tempDiv);
-        new QRCode(tempDiv, { text: url, width: 600, height: 600 });
 
-        setTimeout(() => {
-          const qrCanvas = tempDiv.querySelector("canvas");
-          const qrImg = tempDiv.querySelector("img");
+        try {
+          new QRCode(tempDiv, { text: url, width: 600, height: 600 });
+        } catch (err) {
+          document.body.removeChild(tempDiv);
+          reject(err);
+          return;
+        }
 
-          const proceedDrawing = (qrSource) => {
+        const finishWithQr = (qrSource) => {
+          try {
             const totalBoxSize = imgWidth * cfg.qrScale;
             const pad = totalBoxSize * (10 / 316);
             const qrInnerSize = totalBoxSize - pad * 2;
@@ -2135,38 +2212,266 @@
               const textY = imgHeight * cfg.codeY;
               ctx.fillText(code, textX, textY);
             }
-
-            const pngUrl = canvas.toDataURL("image/png");
-            const downloadLink = document.createElement("a");
-            downloadLink.href = pngUrl;
-            downloadLink.download = `${code}-boceto${cfg.num}.png`;
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
             document.body.removeChild(tempDiv);
-          };
-
-          if (qrCanvas) {
-            proceedDrawing(qrCanvas);
-          } else if (qrImg) {
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.onload = () => proceedDrawing(img);
-            img.src = qrImg.src;
-          } else {
-            alert("No se pudo generar el código QR.");
-            document.body.removeChild(tempDiv);
+            resolve();
+          } catch (err) {
+            if (tempDiv.parentNode) document.body.removeChild(tempDiv);
+            reject(err);
           }
-        }, 200);
-      };
+        };
 
-      templateImg.onerror = () => {
-        alert(`No se pudo cargar la plantilla "${cfg.sourceName}". Verifica que ${cfg.file} exista en la carpeta raíz.`);
-      };
+        const waitQrReady = (tries = 0) => {
+          const qrCanvas = tempDiv.querySelector("canvas");
+          const qrImg = tempDiv.querySelector("img");
+          if (qrCanvas) {
+            finishWithQr(qrCanvas);
+          } else if (qrImg && qrImg.complete && qrImg.naturalWidth > 0) {
+            finishWithQr(qrImg);
+          } else if (qrImg && tries < 25) {
+            setTimeout(() => waitQrReady(tries + 1), 20);
+          } else {
+            if (tempDiv.parentNode) document.body.removeChild(tempDiv);
+            reject(new Error("No se pudo generar el código QR."));
+          }
+        };
+
+        setTimeout(() => waitQrReady(0), 20);
+      });
+    }
+
+    function loadSketchImageElement(cfg) {
+      return new Promise((resolve, reject) => {
+        const imgSrc = getSketchImageSrc(cfg);
+        const img = new Image();
+        if (!imgSrc.startsWith("data:")) {
+          img.crossOrigin = "anonymous";
+        }
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`No se pudo cargar la plantilla "${cfg.sourceName}". Verifica que ${cfg.file} exista en la carpeta raíz.`));
+        img.src = imgSrc;
+      });
+    }
+
+    async function downloadIntegratedTemplate(url, code) {
+      const cfg = getActiveSketch();
+      try {
+        const templateImg = await loadSketchImageElement(cfg);
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        await drawTemplateToCanvas(canvas, ctx, templateImg, cfg, url, code);
+
+        const pngUrl = canvas.toDataURL("image/png");
+        const downloadLink = document.createElement("a");
+        downloadLink.href = pngUrl;
+        downloadLink.download = `${code}.png`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+      } catch (err) {
+        alert(err.message || "Error al generar la plantilla.");
+      }
     }
 
     function closeQrModal() {
       document.getElementById("qrModal").classList.add("hidden");
+    }
+
+    // =========================================================================
+    // DESCARGA MASIVA EN ZIP (SELECCIONADOS O POR CUPO DE CONSECUTIVO)
+    // =========================================================================
+    let zipCancelled = false;
+    let zipRunning = false;
+
+    function getSelectedLinkRecords() {
+      const checkedIds = new Set(
+        [...document.querySelectorAll('.link-checkbox:checked')].map(cb => cb.value)
+      );
+      return allLinksData
+        .filter(link => checkedIds.has(String(link.id)))
+        .sort((a, b) => (a.consecutive || 0) - (b.consecutive || 0));
+    }
+
+    function getRangeLinkRecords() {
+      const fromSeq = Math.max(1, parseInt(document.getElementById("zipFromSeq").value, 10) || 1);
+      const toSeq = Math.max(fromSeq, parseInt(document.getElementById("zipToSeq").value, 10) || fromSeq);
+      return allLinksData
+        .filter(link => (link.consecutive || 0) >= fromSeq && (link.consecutive || 0) <= toSeq)
+        .sort((a, b) => (a.consecutive || 0) - (b.consecutive || 0));
+    }
+
+    function getZipTargetLinks() {
+      const modeEl = document.querySelector('input[name="zipMode"]:checked');
+      const mode = modeEl ? modeEl.value : "range";
+      return mode === "selected" ? getSelectedLinkRecords() : getRangeLinkRecords();
+    }
+
+    function openBatchZipModal() {
+      if (allLinksData.length === 0) {
+        return alert("No hay enlaces cargados para descargar.");
+      }
+      if (typeof JSZip === "undefined") {
+        return alert("No se cargó la librería JSZip. Verifica tu conexión a internet y recarga la página.");
+      }
+
+      zipCancelled = false;
+      zipRunning = false;
+
+      const selected = getSelectedLinkRecords();
+      const maxSeq = allLinksData.reduce((m, l) => Math.max(m, l.consecutive || 0), 1);
+
+      document.getElementById("zipSketchSelect").value = String(sketchRegistry.activeSketch || 1);
+      document.getElementById("zipSelectedHint").textContent = `${selected.length} enlace(s) seleccionado(s) en la vista actual`;
+      document.getElementById("zipTotalRangeHint").textContent = `Rango disponible en el sistema: #1 al #${maxSeq}`;
+
+      const fromInput = document.getElementById("zipFromSeq");
+      const toInput = document.getElementById("zipToSeq");
+      fromInput.max = String(maxSeq);
+      toInput.max = String(maxSeq);
+      fromInput.value = "1";
+      toInput.value = String(Math.min(100, maxSeq));
+
+      const radios = document.querySelectorAll('input[name="zipMode"]');
+      radios.forEach(r => {
+        if (selected.length > 0) {
+          r.checked = r.value === "selected";
+        } else {
+          r.checked = r.value === "range";
+        }
+      });
+
+      document.getElementById("zipProgressWrap").classList.add("hidden");
+      document.getElementById("zipProgressBar").style.width = "0%";
+      document.getElementById("zipStartBtn").disabled = false;
+      document.getElementById("zipCancelBtn").textContent = "Cerrar";
+
+      updateZipModeUI();
+      document.getElementById("batchZipModal").classList.remove("hidden");
+    }
+
+    function closeBatchZipModal() {
+      if (zipRunning) {
+        zipCancelled = true;
+        return;
+      }
+      document.getElementById("batchZipModal").classList.add("hidden");
+    }
+
+    function updateZipModeUI() {
+      const modeEl = document.querySelector('input[name="zipMode"]:checked');
+      const isRange = !modeEl || modeEl.value === "range";
+      document.getElementById("zipRangeInputs").classList.toggle("opacity-50", !isRange);
+      document.getElementById("zipFromSeq").disabled = !isRange;
+      document.getElementById("zipToSeq").disabled = !isRange;
+      updateZipSummary();
+    }
+
+    function updateZipSummary() {
+      const list = getZipTargetLinks();
+      const summary = document.getElementById("zipSummaryBox");
+      const btn = document.getElementById("zipStartBtn");
+      if (list.length === 0) {
+        summary.textContent = "No hay enlaces en la selección o cupo indicado.";
+        btn.disabled = true;
+      } else {
+        const first = list[0];
+        const last = list[list.length - 1];
+        summary.textContent = `Se empacarán ${list.length} placa(s) (#${first.consecutive} a #${last.consecutive}) nombradas por su código corto.`;
+        btn.disabled = false;
+      }
+    }
+
+    function canvasToPngBlob(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error("No se pudo convertir el lienzo a PNG."));
+        }, "image/png");
+      });
+    }
+
+    async function startBatchZipDownload() {
+      if (zipRunning) return;
+      const targets = getZipTargetLinks();
+      if (!targets.length) return alert("No hay enlaces para generar.");
+
+      const sketchNum = Number(document.getElementById("zipSketchSelect").value) || 1;
+      const cfg = sketchRegistry.sketches[sketchNum] || baseSketchPreset(sketchNum);
+
+      let templateImg;
+      try {
+        templateImg = await loadSketchImageElement(cfg);
+      } catch (err) {
+        return alert(err.message);
+      }
+
+      zipRunning = true;
+      zipCancelled = false;
+
+      const startBtn = document.getElementById("zipStartBtn");
+      const cancelBtn = document.getElementById("zipCancelBtn");
+      const progressWrap = document.getElementById("zipProgressWrap");
+      const progressText = document.getElementById("zipProgressText");
+      const progressPct = document.getElementById("zipProgressPct");
+      const progressBar = document.getElementById("zipProgressBar");
+
+      startBtn.disabled = true;
+      cancelBtn.textContent = "Cancelar proceso";
+      progressWrap.classList.remove("hidden");
+
+      const zip = new JSZip();
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const total = targets.length;
+
+      try {
+        for (let i = 0; i < total; i++) {
+          if (zipCancelled) break;
+          const link = targets[i];
+          const shortUrl = `${baseUrl}?r=${encodeURIComponent(link.shortCode)}`;
+
+          const pct = Math.round(((i + 1) / total) * 100);
+          progressText.textContent = `Generando ${i + 1} de ${total} (${link.shortCode}.png)...`;
+          progressPct.textContent = `${pct}%`;
+          progressBar.style.width = `${pct}%`;
+
+          await drawTemplateToCanvas(canvas, ctx, templateImg, cfg, shortUrl, link.shortCode);
+          const pngBlob = await canvasToPngBlob(canvas);
+          zip.file(`${link.shortCode}.png`, pngBlob);
+
+          // Cede un instante al hilo principal para mantener fluida la interfaz
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        if (zipCancelled) {
+          progressText.textContent = "Proceso cancelado.";
+          return;
+        }
+
+        progressText.textContent = "Empacando archivo ZIP...";
+        const zipBlob = await zip.generateAsync({ type: "blob", compression: "STORE" });
+
+        const modeEl = document.querySelector('input[name="zipMode"]:checked');
+        const zipName = modeEl && modeEl.value === "range"
+          ? `placas-${targets[0].consecutive}-a-${targets[targets.length - 1].consecutive}-boceto${cfg.num}.zip`
+          : `placas-seleccionadas-${targets.length}-boceto${cfg.num}.zip`;
+
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = zipName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+
+        progressText.textContent = `¡Listo! Se descargaron ${total} placas.`;
+      } catch (err) {
+        console.error(err);
+        alert("Error generando el ZIP: " + (err.message || err));
+      } finally {
+        zipRunning = false;
+        startBtn.disabled = false;
+        cancelBtn.textContent = "Cerrar";
+      }
     }
   </script>
 </body>
