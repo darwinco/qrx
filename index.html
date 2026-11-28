@@ -64,17 +64,32 @@
       display: block;
       pointer-events: none;
     }
+    .sort-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .sort-btn:hover {
+      color: #2563eb;
+    }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
 
   <!-- PANTALLA DE CARGA / REDIRECCIÓN PÚBLICA -->
-  <div id="redirectSection" class="hidden flex flex-col items-center justify-center min-h-screen">
-    <div class="p-8 bg-white rounded-lg shadow-md text-center max-w-sm w-full">
+  <div id="redirectSection" class="hidden flex flex-col items-center justify-center min-h-screen p-4">
+    <div id="redirectLoadingBox" class="p-8 bg-white rounded-lg shadow-md text-center max-w-sm w-full">
       <img src="redirect.webp" alt="Redirigiendo..." class="w-28 h-28 mx-auto mb-4 object-contain">
       <h2 class="text-xl font-bold text-gray-800 mb-2">Redireccionando...</h2>
       <p class="text-gray-600 text-sm mb-4">Por favor espera un momento.</p>
       <a id="manualLink" href="#" class="text-blue-600 underline text-xs hidden">Haz clic aquí si no redirige automáticamente</a>
+    </div>
+    <div id="redirectNoticeBox" class="hidden p-8 bg-white rounded-lg shadow-md text-center max-w-sm w-full">
+      <h2 id="redirectNoticeTitle" class="text-xl font-bold text-gray-800 mb-2">Enlace no disponible</h2>
+      <p id="redirectNoticeMsg" class="text-gray-600 text-sm mb-6">Este enlace está desactivado o no existe.</p>
+      <a id="redirectHomeLink" href="#" class="inline-block bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700">Ir al inicio</a>
     </div>
   </div>
 
@@ -170,7 +185,7 @@
             <option value="active">Activos</option>
             <option value="inactive">Inactivos</option>
           </select>
-          <input type="text" id="searchInput" oninput="filterLinks()" placeholder="🔍 Buscar por código, URL, notas o usuario..." class="w-full sm:w-72 p-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500">
+          <input type="text" id="searchInput" oninput="filterLinks()" placeholder="🔍 Buscar por consecutivo, código, URL, notas o usuario..." class="w-full sm:w-72 p-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500">
         </div>
       </div>
 
@@ -182,9 +197,25 @@
               <th class="p-4 w-12 text-center">
                 <input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)" class="w-4 h-4 text-blue-600 rounded">
               </th>
-              <th class="p-4">Código Corto</th>
+              <th class="p-4">
+                <button type="button" onclick="toggleSort('seq')" class="sort-btn">
+                  <span>Consecutivo</span>
+                  <span id="sortIcon-seq" class="text-xs text-gray-400">↕</span>
+                </button>
+              </th>
+              <th class="p-4">
+                <button type="button" onclick="toggleSort('code')" class="sort-btn">
+                  <span>Código Corto</span>
+                  <span id="sortIcon-code" class="text-xs text-gray-400">↕</span>
+                </button>
+              </th>
               <th class="p-4">URL Destino</th>
-              <th class="p-4">Estado</th>
+              <th class="p-4">
+                <button type="button" onclick="toggleSort('status')" class="sort-btn">
+                  <span>Estado</span>
+                  <span id="sortIcon-status" class="text-xs text-gray-400">↕</span>
+                </button>
+              </th>
               <th class="p-4">Propietario</th>
               <th class="p-4">Clics</th>
               <th class="p-4">Notas</th>
@@ -233,8 +264,14 @@
         </form>
       </div>
 
-      <div class="flex items-center mb-4 gap-3">
-        <button onclick="loadUsers()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow">🔄 Actualizar</button>
+      <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center mb-4 gap-3">
+        <div class="flex items-center gap-3">
+          <button onclick="loadUsers()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow">🔄 Actualizar</button>
+          <span id="usersCountLabel" class="text-sm text-gray-500">0 usuarios</span>
+        </div>
+        <div class="w-full sm:w-80">
+          <input type="text" id="userSearchInput" oninput="filterUsers()" placeholder="🔍 Buscar por usuario o correo..." class="w-full p-2 border rounded text-sm bg-white focus:ring-blue-500 focus:border-blue-500">
+        </div>
       </div>
 
       <div class="bg-white rounded-lg shadow overflow-x-auto">
@@ -393,7 +430,7 @@
       <div class="flex justify-between items-center mb-4 border-b pb-3">
         <div>
           <h3 class="text-lg font-bold text-gray-800">Personalizar y Exportar Plantilla con QR</h3>
-          <p class="text-xs text-gray-500">Arrastra el código QR o el código corto sobre el boceto, o digita sus posiciones. Los ajustes se guardan automáticamente.</p>
+          <p class="text-xs text-gray-500">Elige un boceto (boceto1.jpg a boceto11.jpg), ajusta y arrastra el QR o el código corto. Cada placa guarda su configuración.</p>
         </div>
         <button type="button" onclick="closeQrModal()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none px-2">&times;</button>
       </div>
@@ -402,7 +439,7 @@
         <!-- COLUMNA IZQUIERDA: LIENZO INTERACTIVO -->
         <div class="md:col-span-7 flex flex-col items-center bg-gray-50 p-3 rounded border">
           <div id="templateContainer" class="template-container shadow border rounded bg-white">
-            <img id="templatePreviewImg" src="boceto.jpg" alt="Plantilla Boceto" class="template-img" onload="syncModalOverlay()">
+            <img id="templatePreviewImg" src="boceto1.jpg" alt="Plantilla Boceto" class="template-img" onload="syncModalOverlay()">
             <div id="modalQrBox" title="Arrastra para mover el QR">
               <div id="qrcode"></div>
             </div>
@@ -415,17 +452,27 @@
         <div class="md:col-span-5 space-y-4 text-left">
           <!-- Boceto / Plantilla -->
           <div class="bg-gray-50 p-3 rounded border space-y-2">
-            <label class="block text-sm font-semibold text-gray-700">1. Boceto (Plantilla)</label>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" onclick="useDefaultTemplateImage()" class="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-100">
-                🖼️ Plantilla por defecto
-              </button>
+            <label for="sketchSelect" class="block text-sm font-semibold text-gray-700">1. Elegir Boceto (boceto1.jpg – boceto11.jpg)</label>
+            <select id="sketchSelect" onchange="selectSketch(this.value)" class="w-full p-2 border rounded bg-white text-sm font-mono text-gray-800">
+              <option value="1">boceto1.jpg</option>
+              <option value="2">boceto2.jpg</option>
+              <option value="3">boceto3.jpg</option>
+              <option value="4">boceto4.jpg</option>
+              <option value="5">boceto5.jpg</option>
+              <option value="6">boceto6.jpg</option>
+              <option value="7">boceto7.jpg</option>
+              <option value="8">boceto8.jpg</option>
+              <option value="9">boceto9.jpg</option>
+              <option value="10">boceto10.jpg</option>
+              <option value="11">boceto11.jpg</option>
+            </select>
+            <div class="flex flex-wrap gap-2 pt-1">
               <label class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-blue-700 cursor-pointer">
                 📤 Subir imagen propia
                 <input type="file" id="customTemplateInput" accept="image/png,image/jpeg,image/webp" onchange="handleCustomTemplateUpload(this)" class="hidden">
               </label>
             </div>
-            <p id="templateSourceStatus" class="text-xs text-gray-500">Usando: boceto.jpg (por defecto)</p>
+            <p id="templateSourceStatus" class="text-xs text-gray-500">Placa activa: boceto1.jpg</p>
           </div>
 
           <!-- Tamaño y posición del QR -->
@@ -486,7 +533,7 @@
               📥 Descargar Plantilla Completa
             </button>
             <button type="button" onclick="resetTemplateConfig()" class="bg-amber-100 text-amber-800 border border-amber-300 px-4 py-2 rounded text-xs font-semibold hover:bg-amber-200 transition">
-              ↺ Restablecer valores por defecto
+              ↺ Restablecer ajustes de esta placa
             </button>
             <button type="button" onclick="closeQrModal()" class="bg-gray-500 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-gray-600">
               Cerrar
@@ -514,19 +561,6 @@
 
   <script>
     const baseUrl = window.location.href.split('?')[0];
-
-    // URL pública fija que se codifica en los QR (no depende de la barra de direcciones).
-    // Se puede sobrescribir con CONFIG.PUBLIC_BASE_URL en config.js.
-    const PUBLIC_BASE_URL = (typeof CONFIG !== "undefined" && CONFIG.PUBLIC_BASE_URL) || "https://CalificarEnGoogle.com/";
-
-    // Construye la URL corta con new URL(): siempre ASCII, con https:// y sin hash ni parámetros ajenos.
-    function buildShortUrl(code) {
-      const u = new URL(PUBLIC_BASE_URL);
-      u.search = "";
-      u.hash = "";
-      u.searchParams.set("r", code);
-      return u.href;
-    }
     const urlParams = new URLSearchParams(window.location.search);
     const redirectCode = urlParams.get('r');
     const resetTokenParam = urlParams.get('reset');
@@ -535,6 +569,8 @@
     let filteredLinksData = [];
     let currentPage = 1;
     let pageSize = 10; // 10, 50, 100, 200, 300 o "all"
+    let sortField = "seq"; // "seq" | "code" | "status"
+    let sortDir = "asc";   // "asc" | "desc"
     let allUsersData = [];
     let myLinksData = [];
     let myEmail = "";
@@ -551,6 +587,7 @@
     const getRole = () => localStorage.getItem("auth_role");
 
     window.onload = () => {
+      document.getElementById("redirectHomeLink").href = baseUrl;
       localStorage.removeItem("admin_token"); // sesión del formato anterior
       initTemplateEditor();
       if (redirectCode) {
@@ -562,9 +599,18 @@
       }
     };
 
+    function showRedirectNotice(title, message) {
+      document.getElementById("redirectLoadingBox").classList.add("hidden");
+      document.getElementById("redirectNoticeTitle").textContent = title;
+      document.getElementById("redirectNoticeMsg").textContent = message;
+      document.getElementById("redirectNoticeBox").classList.remove("hidden");
+    }
+
     async function handleRedirect(code) {
       document.getElementById("loginSection").classList.add("hidden");
       document.getElementById("redirectSection").classList.remove("hidden");
+      document.getElementById("redirectLoadingBox").classList.remove("hidden");
+      document.getElementById("redirectNoticeBox").classList.add("hidden");
 
       try {
         const response = await fetch(`${CONFIG.SCRIPT_URL}?r=${encodeURIComponent(code)}`);
@@ -579,12 +625,17 @@
           document.getElementById("manualLink").classList.remove("hidden");
           window.location.replace(dest);
         } else {
-          alert(res.error || "El enlace acortado no existe.");
-          window.location.href = baseUrl;
+          showRedirectNotice(
+            response.status === 403 ? "Enlace desactivado" : "Enlace no encontrado",
+            res.error || "Este enlace está desactivado o no existe."
+          );
         }
       } catch (err) {
         console.error(err);
-        alert("Error de conexión al procesar el enlace.");
+        showRedirectNotice(
+          "Sin conexión",
+          "No se pudo verificar el estado del enlace en este momento."
+        );
       }
     }
 
@@ -593,15 +644,13 @@
         const response = await fetch(CONFIG.SCRIPT_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // El token de sesión es solo un valor por defecto: si la petición ya trae su propio
-          // "token" (por ejemplo el de recuperación de contraseña), ese es el que se envía.
           body: JSON.stringify({ token: localStorage.getItem("auth_token") || "", ...payload })
         });
         const textData = await response.text();
         return JSON.parse(textData);
       } catch (error) {
         console.error("Error de conexión:", error);
-        return { success: false, error: "No se pudo comunicar con Cloudflare KV." };
+        return { success: false, error: "No se pudo comunicar con el servidor." };
       }
     }
 
@@ -617,7 +666,6 @@
       const user = document.getElementById("userInput").value;
       const pass = document.getElementById("passInput").value;
 
-      // La validación se hace en el Worker (las contraseñas nunca viven en el navegador)
       const res = await apiRequest({ action: "login", user, pass });
 
       if (res.success && res.token) {
@@ -626,7 +674,7 @@
         localStorage.setItem("auth_user", res.username);
         if (res.mustChange) {
           localStorage.setItem("auth_must_change", "1");
-          tempPassword = pass; // solo en memoria, para no pedirla dos veces
+          tempPassword = pass;
         } else {
           localStorage.removeItem("auth_must_change");
         }
@@ -667,15 +715,12 @@
       loadUserData();
     }
 
-    // Cambio obligatorio: el panel queda oculto y el diálogo no se puede cerrar
     function forcePasswordChange() {
       document.getElementById("userSection").classList.add("hidden");
       localStorage.setItem("auth_must_change", "1");
       openPwdModal(null, true);
     }
 
-    // Traslada (una sola vez) los datos anteriores de KV al Durable Object.
-    // Es automático y por lotes; si ya se migró, responde "done" de inmediato.
     async function runMigration() {
       for (let i = 0; i < 100; i++) {
         const res = await apiRequest({ action: "migrate" });
@@ -770,7 +815,7 @@
     }
 
     // =========================================================================
-    // ADMINISTRADOR: ENLACES
+    // ADMINISTRADOR: ENLACES, CONSECUTIVO POR CREACIÓN Y ORDENAMIENTO
     // =========================================================================
     function switchTab(name) {
       const isLinks = name === "links";
@@ -787,14 +832,81 @@
       if (isLinks) loadLinks(); else loadUsers();
     }
 
+    // Asigna un consecutivo único de 1..N según el orden real de creación
+    function assignCreationConsecutives(links) {
+      const byCreation = [...links].sort((a, b) => {
+        const ca = Number(a.createdAt) || 0;
+        const cb = Number(b.createdAt) || 0;
+        if (ca !== cb) return ca - cb;
+        return String(a.shortCode || "").localeCompare(String(b.shortCode || ""), undefined, { numeric: true });
+      });
+      const seqMap = new Map();
+      byCreation.forEach((item, idx) => {
+        seqMap.set(item.id, idx + 1);
+      });
+      return links.map(item => ({
+        ...item,
+        consecutive: seqMap.get(item.id) || 0
+      }));
+    }
+
+    function updateSortIcons() {
+      ["seq", "code", "status"].forEach(field => {
+        const el = document.getElementById(`sortIcon-${field}`);
+        if (!el) return;
+        if (sortField === field) {
+          el.textContent = sortDir === "asc" ? "↑" : "↓";
+          el.className = "text-xs text-blue-600 font-bold";
+        } else {
+          el.textContent = "↕";
+          el.className = "text-xs text-gray-400";
+        }
+      });
+    }
+
+    function toggleSort(field) {
+      if (sortField === field) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortField = field;
+        sortDir = "asc";
+      }
+      updateSortIcons();
+      applySortAndRender();
+    }
+
+    function getSortedLinks(list) {
+      const mult = sortDir === "asc" ? 1 : -1;
+      return [...list].sort((a, b) => {
+        let cmp = 0;
+        if (sortField === "seq") {
+          cmp = (a.consecutive || 0) - (b.consecutive || 0);
+        } else if (sortField === "code") {
+          cmp = String(a.shortCode || "").localeCompare(String(b.shortCode || ""), undefined, { sensitivity: "base", numeric: true });
+        } else if (sortField === "status") {
+          const labelA = a.active ? "Activo" : "Inactivo";
+          const labelB = b.active ? "Activo" : "Inactivo";
+          cmp = labelA.localeCompare(labelB, "es", { sensitivity: "base" });
+        }
+        if (cmp !== 0) return cmp * mult;
+        return (a.consecutive || 0) - (b.consecutive || 0);
+      });
+    }
+
+    function applySortAndRender() {
+      const sorted = getSortedLinks(filteredLinksData);
+      renderTable(sorted);
+    }
+
     async function loadLinks() {
       const res = await apiRequest({ action: "list" });
       if (checkAuth(res)) return;
       if (res.success) {
-        allLinksData = res.data;
+        allLinksData = assignCreationConsecutives(res.data || []);
         document.getElementById("searchInput").value = "";
         document.getElementById("statusFilter").value = "all";
         currentPage = 1;
+        updateSortIcons();
         filterLinks();
       } else {
         alert("Error: " + res.error);
@@ -822,7 +934,7 @@
     function changePageSize(val) {
       pageSize = val === "all" ? "all" : Number(val);
       currentPage = 1;
-      renderTable(filteredLinksData);
+      applySortAndRender();
     }
 
     function goToPage(page) {
@@ -830,7 +942,7 @@
       const perPage = pageSize === "all" ? Math.max(1, total) : pageSize;
       const totalPages = Math.max(1, Math.ceil(total / perPage));
       currentPage = Math.min(Math.max(1, page), totalPages);
-      renderTable(filteredLinksData);
+      applySortAndRender();
     }
 
     function updatePaginationControls(total) {
@@ -861,12 +973,11 @@
     }
 
     function renderTable(links) {
-      filteredLinksData = links;
       const tbody = document.getElementById("linksTableBody");
       document.getElementById("selectAll").checked = false;
 
       if (links.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-gray-500">No se encontraron enlaces.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-gray-500">No se encontraron enlaces.</td></tr>`;
         updatePaginationControls(0);
         updateSelectedCount();
         return;
@@ -879,7 +990,7 @@
       const pageItems = links.slice(startIdx, startIdx + perPage);
 
       tbody.innerHTML = pageItems.map(link => {
-        const shortUrl = buildShortUrl(link.shortCode);
+        const shortUrl = `${baseUrl}?r=${encodeURIComponent(link.shortCode)}`;
         const owner = link.owner
           ? `<span class="font-semibold">${esc(link.owner)}</span>`
           : '<span class="text-gray-400">Sin asignar</span>';
@@ -888,6 +999,7 @@
             <td class="p-4 text-center">
               <input type="checkbox" value="${esc(link.id)}" onclick="updateSelectedCount()" class="link-checkbox w-4 h-4 text-blue-600 rounded">
             </td>
+            <td class="p-4 font-mono font-semibold text-gray-700">#${esc(link.consecutive)}</td>
             <td class="p-4 font-mono text-blue-600"><a href="${esc(shortUrl)}" target="_blank" rel="noopener">${esc(link.shortCode)}</a></td>
             <td class="p-4 truncate max-w-xs" title="${esc(link.targetUrl)}">${esc(link.targetUrl)}</td>
             <td class="p-4">${statusBadge(link.active)}</td>
@@ -909,12 +1021,14 @@
     }
 
     function filterLinks() {
-      const query = document.getElementById("searchInput").value.toLowerCase();
+      const query = document.getElementById("searchInput").value.trim().toLowerCase();
       const status = document.getElementById("statusFilter").value;
-      const filtered = allLinksData.filter(link => {
+      filteredLinksData = allLinksData.filter(link => {
         if (status === "active" && !link.active) return false;
         if (status === "inactive" && link.active) return false;
+        if (!query) return true;
         return (
+          String(link.consecutive).includes(query) ||
           link.shortCode.toLowerCase().includes(query) ||
           link.targetUrl.toLowerCase().includes(query) ||
           (link.notes && link.notes.toLowerCase().includes(query)) ||
@@ -922,15 +1036,17 @@
         );
       });
       currentPage = 1;
-      renderTable(filtered);
+      applySortAndRender();
     }
 
     function exportLinksCsv() {
-      if (!filteredLinksData.length) {
+      const items = getSortedLinks(filteredLinksData);
+      if (!items.length) {
         return alert("No hay enlaces para exportar con el filtro actual.");
       }
-      const header = ["codigo_corto", "url_destino", "estado", "propietario", "clics", "notas"].map(csvCell).join(";");
-      const rows = filteredLinksData.map(link => [
+      const header = ["consecutivo", "codigo_corto", "url_destino", "estado", "propietario", "clics", "notas"].map(csvCell).join(";");
+      const rows = items.map(link => [
+        link.consecutive,
         link.shortCode,
         link.targetUrl,
         link.active ? "Activo" : "Inactivo",
@@ -982,7 +1098,6 @@
       const shortCode = document.getElementById("shortCode").value;
       const notes = document.getElementById("notes").value;
 
-      // Por defecto los códigos cortos se crean en estado Inactivo (active: false)
       const res = await apiRequest({ action: "create", targetUrl, shortCode, notes, active: false });
       if (checkAuth(res)) return;
       if (res.success) {
@@ -1045,20 +1160,41 @@
     }
 
     // =========================================================================
-    // ADMINISTRADOR: USUARIOS
+    // ADMINISTRADOR: USUARIOS Y BUSCADOR
     // =========================================================================
     async function loadUsers() {
       const res = await apiRequest({ action: "users_list" });
       if (checkAuth(res)) return;
       if (!res.success) return alert("Error: " + res.error);
 
-      allUsersData = res.data;
-      const tbody = document.getElementById("usersTableBody");
-      if (allUsersData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-gray-500">Aún no hay usuarios. Crea el primero arriba.</td></tr>`;
+      allUsersData = res.data || [];
+      document.getElementById("userSearchInput").value = "";
+      renderUsersTable(allUsersData);
+    }
+
+    function filterUsers() {
+      const query = document.getElementById("userSearchInput").value.trim().toLowerCase();
+      if (!query) {
+        renderUsersTable(allUsersData);
         return;
       }
-      tbody.innerHTML = allUsersData.map(u => `
+      const filtered = allUsersData.filter(u =>
+        String(u.username || "").toLowerCase().includes(query) ||
+        String(u.email || "").toLowerCase().includes(query)
+      );
+      renderUsersTable(filtered);
+    }
+
+    function renderUsersTable(users) {
+      const tbody = document.getElementById("usersTableBody");
+      const countLabel = document.getElementById("usersCountLabel");
+      countLabel.textContent = `${users.length} usuario(s)`;
+
+      if (users.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-gray-500">${allUsersData.length === 0 ? "Aún no hay usuarios. Crea el primero arriba." : "No se encontraron usuarios con ese criterio."}</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = users.map(u => `
         <tr class="border-b hover:bg-gray-50">
           <td class="p-4 font-semibold">${esc(u.username)}${u.mustChange ? ' <span class="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700" title="Aún no ha cambiado su contraseña temporal">Contraseña temporal</span>' : ""}</td>
           <td class="p-4 text-sm font-mono text-gray-700">${u.email ? esc(u.email) : '<span class="text-gray-400 font-sans">Sin correo</span>'}</td>
@@ -1168,7 +1304,7 @@
         const wasForced = localStorage.getItem("auth_must_change") === "1";
         closePwdModal();
         if (pwdTarget) {
-          openCredModal(pwdTarget, password); // el admin puede compartir la nueva contraseña
+          openCredModal(pwdTarget, password);
         } else {
           localStorage.removeItem("auth_must_change");
           tempPassword = null;
@@ -1229,7 +1365,7 @@
         return;
       }
       tbody.innerHTML = list.map(link => {
-        const shortUrl = buildShortUrl(link.shortCode);
+        const shortUrl = `${baseUrl}?r=${encodeURIComponent(link.shortCode)}`;
         return `
           <tr class="border-b hover:bg-gray-50">
             <td class="p-4 font-mono text-blue-600"><a href="${esc(shortUrl)}" target="_blank" rel="noopener">${esc(link.shortCode)}</a></td>
@@ -1262,8 +1398,8 @@
     // =========================================================================
     const MAX_CSV_ROWS = 2000;
     const CSV_CHUNK = 100;
-    let csvRows = [];       // [{ line, targetUrl, shortCode, notes }]
-    let csvLastRows = {};   // line -> fila (para el archivo de errores)
+    let csvRows = [];
+    let csvLastRows = {};
     let csvLastFailed = [];
 
     const CSV_HEADERS = {
@@ -1538,7 +1674,7 @@
       const container = document.getElementById("userQrcodeBox");
       container.innerHTML = "";
       document.getElementById("userQrCodeLabel").textContent = code;
-      new QRCode(container, { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+      new QRCode(container, { text: url, width: 220, height: 220 });
       document.getElementById("userQrDownloadBtn").onclick = () => downloadPlainQR(url, code);
       document.getElementById("userQrModal").classList.remove("hidden");
     }
@@ -1550,7 +1686,7 @@
     function downloadPlainQR(url, code) {
       const tempDiv = document.createElement("div");
       document.body.appendChild(tempDiv);
-      new QRCode(tempDiv, { text: url, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
+      new QRCode(tempDiv, { text: url, width: 512, height: 512 });
 
       setTimeout(() => {
         const qrCanvas = tempDiv.querySelector("canvas");
@@ -1591,50 +1727,106 @@
     }
 
     // =========================================================================
-    // PERSONALIZADOR DE PLANTILLA Y EXPORTACIÓN SINCRONIZADA (ADMINISTRADOR)
+    // REGISTRO DE 11 BOCETOS (boceto1.jpg .. boceto11.jpg) Y EXPORTACIÓN
     // =========================================================================
-    const TEMPLATE_STORAGE_KEY = "qrx_admin_template_v1";
-    const DEFAULT_TEMPLATE_CONFIG = {
-      src: "boceto.jpg",
-      sourceName: "boceto.jpg (por defecto)",
-      qrX: 0.502,       // Centro X del QR (50.3%)
-      qrY: 0.563,       // Centro Y del QR (56.3%)
-      qrScale: 0.29,    // Tamaño total del cuadro QR (33.0%)
-      showCode: true,   // Mostrar código corto
-      codeX: 0.500,     // Centro X del texto (50.0%)
-      codeY: 0.900,     // Centro Y del texto (90.3%)
-      codeScale: 0.033, // Tamaño de fuente (2.8%)
-      codeColor: "#999999"
-    };
+    const SKETCH_COUNT = 11;
+    const TEMPLATE_REGISTRY_KEY = "qrx_admin_sketches_v2";
+    const LEGACY_TEMPLATE_KEY = "qrx_admin_template_v1";
 
-    let templateConfig = loadTemplateConfig();
-    let dragTarget = null; // "qr" | "code" | null
-
-    function loadTemplateConfig() {
-      try {
-        const raw = localStorage.getItem(TEMPLATE_STORAGE_KEY);
-        if (!raw) return { ...DEFAULT_TEMPLATE_CONFIG };
-        const parsed = JSON.parse(raw);
-        return {
-          ...DEFAULT_TEMPLATE_CONFIG,
-          ...parsed,
-          qrX: clamp(Number(parsed.qrX) || DEFAULT_TEMPLATE_CONFIG.qrX, 0.05, 0.95),
-          qrY: clamp(Number(parsed.qrY) || DEFAULT_TEMPLATE_CONFIG.qrY, 0.05, 0.95),
-          qrScale: clamp(Number(parsed.qrScale) || DEFAULT_TEMPLATE_CONFIG.qrScale, 0.10, 0.60),
-          showCode: parsed.showCode !== false,
-          codeX: clamp(Number(parsed.codeX) || DEFAULT_TEMPLATE_CONFIG.codeX, 0.05, 0.95),
-          codeY: clamp(Number(parsed.codeY) || DEFAULT_TEMPLATE_CONFIG.codeY, 0.03, 0.97),
-          codeScale: clamp(Number(parsed.codeScale) || DEFAULT_TEMPLATE_CONFIG.codeScale, 0.015, 0.08),
-          codeColor: /^#[0-9a-fA-F]{6}$/.test(parsed.codeColor) ? parsed.codeColor : DEFAULT_TEMPLATE_CONFIG.codeColor
-        };
-      } catch {
-        return { ...DEFAULT_TEMPLATE_CONFIG };
-      }
+    function baseSketchPreset(num) {
+      return {
+        num,
+        file: `boceto${num}.jpg`,
+        customSrc: "",
+        sourceName: `boceto${num}.jpg`,
+        qrX: 0.502,
+        qrY: 0.563,
+        qrScale: 0.29,
+        showCode: true,
+        codeX: 0.500,
+        codeY: 0.900,
+        codeScale: 0.033,
+        codeColor: "#999999"
+      };
     }
 
-    function saveTemplateConfig() {
+    function sanitizeSketchEntry(num, raw) {
+      const base = baseSketchPreset(num);
+      if (!raw || typeof raw !== "object") return base;
+      return {
+        ...base,
+        customSrc: typeof raw.customSrc === "string" ? raw.customSrc : "",
+        sourceName: typeof raw.sourceName === "string" && raw.sourceName.trim() ? raw.sourceName.trim() : base.file,
+        qrX: clamp(Number(raw.qrX) || base.qrX, 0.05, 0.95),
+        qrY: clamp(Number(raw.qrY) || base.qrY, 0.05, 0.95),
+        qrScale: clamp(Number(raw.qrScale) || base.qrScale, 0.10, 0.60),
+        showCode: raw.showCode !== false,
+        codeX: clamp(Number(raw.codeX) || base.codeX, 0.05, 0.95),
+        codeY: clamp(Number(raw.codeY) || base.codeY, 0.03, 0.97),
+        codeScale: clamp(Number(raw.codeScale) || base.codeScale, 0.015, 0.08),
+        codeColor: /^#[0-9a-fA-F]{6}$/.test(raw.codeColor) ? raw.codeColor : base.codeColor
+      };
+    }
+
+    function loadSketchRegistry() {
+      const registryState = {
+        activeSketch: 1,
+        sketches: {}
+      };
+      for (let i = 1; i <= SKETCH_COUNT; i++) {
+        registryState.sketches[i] = baseSketchPreset(i);
+      }
+
       try {
-        localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templateConfig));
+        const raw = localStorage.getItem(TEMPLATE_REGISTRY_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const active = Number(parsed.activeSketch);
+          if (active >= 1 && active <= SKETCH_COUNT) {
+            registryState.activeSketch = active;
+          }
+          if (parsed.sketches && typeof parsed.sketches === "object") {
+            for (let i = 1; i <= SKETCH_COUNT; i++) {
+              registryState.sketches[i] = sanitizeSketchEntry(i, parsed.sketches[i]);
+            }
+          }
+          return registryState;
+        }
+
+        // Migra ajuste previo si existía en la versión anterior
+        const legacyRaw = localStorage.getItem(LEGACY_TEMPLATE_KEY);
+        if (legacyRaw) {
+          const legacy = JSON.parse(legacyRaw);
+          registryState.sketches[1] = sanitizeSketchEntry(1, {
+            ...legacy,
+            customSrc: typeof legacy.src === "string" && legacy.src.startsWith("data:") ? legacy.src : "",
+            sourceName: legacy.sourceName || "boceto1.jpg"
+          });
+        }
+      } catch {
+        // usa valores por defecto
+      }
+      return registryState;
+    }
+
+    let sketchRegistry = loadSketchRegistry();
+    let dragTarget = null;
+
+    function getActiveSketch() {
+      const num = sketchRegistry.activeSketch;
+      if (!sketchRegistry.sketches[num]) {
+        sketchRegistry.sketches[num] = baseSketchPreset(num);
+      }
+      return sketchRegistry.sketches[num];
+    }
+
+    function getSketchImageSrc(cfg) {
+      return cfg.customSrc ? cfg.customSrc : cfg.file;
+    }
+
+    function saveSketchRegistry() {
+      try {
+        localStorage.setItem(TEMPLATE_REGISTRY_KEY, JSON.stringify(sketchRegistry));
         return true;
       } catch (e) {
         alert("No se pudo guardar en localStorage (la imagen subida supera el espacio disponible del navegador). Prueba con una imagen más liviana.");
@@ -1662,15 +1854,16 @@
         const rect = img.getBoundingClientRect();
         if (!rect.width || !rect.height) return;
 
+        const cfg = getActiveSketch();
         const nx = (e.clientX - rect.left) / rect.width;
         const ny = (e.clientY - rect.top) / rect.height;
 
         if (dragTarget === "qr") {
-          templateConfig.qrX = clamp(nx, 0.05, 0.95);
-          templateConfig.qrY = clamp(ny, 0.05, 0.95);
+          cfg.qrX = clamp(nx, 0.05, 0.95);
+          cfg.qrY = clamp(ny, 0.05, 0.95);
         } else if (dragTarget === "code") {
-          templateConfig.codeX = clamp(nx, 0.05, 0.95);
-          templateConfig.codeY = clamp(ny, 0.03, 0.97);
+          cfg.codeX = clamp(nx, 0.05, 0.95);
+          cfg.codeY = clamp(ny, 0.03, 0.97);
         }
         syncModalOverlay();
       };
@@ -1681,7 +1874,7 @@
           e.currentTarget.releasePointerCapture(e.pointerId);
         }
         dragTarget = null;
-        saveTemplateConfig();
+        saveSketchRegistry();
       };
 
       qrBox.addEventListener("pointerdown", startDrag("qr"));
@@ -1702,22 +1895,25 @@
     }
 
     function syncControlsUI() {
-      document.getElementById("templateSourceStatus").textContent = `Usando: ${templateConfig.sourceName}`;
-      document.getElementById("qrScaleRange").value = (templateConfig.qrScale * 100).toFixed(1);
-      document.getElementById("qrScaleValue").textContent = `${(templateConfig.qrScale * 100).toFixed(1)}%`;
-      document.getElementById("qrPosXInput").value = (templateConfig.qrX * 100).toFixed(1);
-      document.getElementById("qrPosYInput").value = (templateConfig.qrY * 100).toFixed(1);
+      const cfg = getActiveSketch();
+      document.getElementById("sketchSelect").value = String(cfg.num);
+      document.getElementById("templateSourceStatus").textContent = `Placa activa: ${cfg.sourceName}`;
+      document.getElementById("qrScaleRange").value = (cfg.qrScale * 100).toFixed(1);
+      document.getElementById("qrScaleValue").textContent = `${(cfg.qrScale * 100).toFixed(1)}%`;
+      document.getElementById("qrPosXInput").value = (cfg.qrX * 100).toFixed(1);
+      document.getElementById("qrPosYInput").value = (cfg.qrY * 100).toFixed(1);
 
-      document.getElementById("showCodeCheckbox").checked = templateConfig.showCode;
-      document.getElementById("codeScaleRange").value = (templateConfig.codeScale * 100).toFixed(1);
-      document.getElementById("codeScaleValue").textContent = `${(templateConfig.codeScale * 100).toFixed(1)}%`;
-      document.getElementById("codeColorInput").value = templateConfig.codeColor;
-      document.getElementById("codeColorLabel").textContent = templateConfig.codeColor.toUpperCase();
-      document.getElementById("codePosXInput").value = (templateConfig.codeX * 100).toFixed(1);
-      document.getElementById("codePosYInput").value = (templateConfig.codeY * 100).toFixed(1);
+      document.getElementById("showCodeCheckbox").checked = cfg.showCode;
+      document.getElementById("codeScaleRange").value = (cfg.codeScale * 100).toFixed(1);
+      document.getElementById("codeScaleValue").textContent = `${(cfg.codeScale * 100).toFixed(1)}%`;
+      document.getElementById("codeColorInput").value = cfg.codeColor;
+      document.getElementById("codeColorLabel").textContent = cfg.codeColor.toUpperCase();
+      document.getElementById("codePosXInput").value = (cfg.codeX * 100).toFixed(1);
+      document.getElementById("codePosYInput").value = (cfg.codeY * 100).toFixed(1);
     }
 
     function syncModalOverlay() {
+      const cfg = getActiveSketch();
       const img = document.getElementById("templatePreviewImg");
       const qrBox = document.getElementById("modalQrBox");
       const codeBox = document.getElementById("modalShortCodeText");
@@ -1726,77 +1922,86 @@
       const displayW = img.clientWidth;
       const natW = img.naturalWidth || 1200;
       const natH = img.naturalHeight || 1600;
-      dimLabel.textContent = `Resolución de exportación: ${natW} × ${natH} px`;
+      dimLabel.textContent = `${cfg.file} · Resolución: ${natW} × ${natH} px`;
 
       if (displayW > 0) {
-        const boxSizePx = displayW * templateConfig.qrScale;
-        const padPx = Math.max(2, boxSizePx * (14 / 316));
+        const boxSizePx = displayW * cfg.qrScale;
+        const padPx = Math.max(2, boxSizePx * (10 / 316));
         qrBox.style.width = `${boxSizePx}px`;
         qrBox.style.height = `${boxSizePx}px`;
         qrBox.style.padding = `${padPx}px`;
-        qrBox.style.left = `${templateConfig.qrX * 100}%`;
-        qrBox.style.top = `${templateConfig.qrY * 100}%`;
+        qrBox.style.left = `${cfg.qrX * 100}%`;
+        qrBox.style.top = `${cfg.qrY * 100}%`;
 
-        const fontSizePx = Math.max(8, displayW * templateConfig.codeScale);
+        const fontSizePx = Math.max(8, displayW * cfg.codeScale);
         codeBox.style.fontSize = `${fontSizePx}px`;
-        codeBox.style.color = templateConfig.codeColor;
-        codeBox.style.left = `${templateConfig.codeX * 100}%`;
-        codeBox.style.top = `${templateConfig.codeY * 100}%`;
+        codeBox.style.color = cfg.codeColor;
+        codeBox.style.left = `${cfg.codeX * 100}%`;
+        codeBox.style.top = `${cfg.codeY * 100}%`;
       }
 
-      codeBox.classList.toggle("hidden", !templateConfig.showCode);
+      codeBox.classList.toggle("hidden", !cfg.showCode);
       syncControlsUI();
     }
 
+    function selectSketch(numVal) {
+      const num = Number(numVal);
+      if (num < 1 || num > SKETCH_COUNT) return;
+      sketchRegistry.activeSketch = num;
+      saveSketchRegistry();
+
+      const cfg = getActiveSketch();
+      const previewImg = document.getElementById("templatePreviewImg");
+      previewImg.src = getSketchImageSrc(cfg);
+      syncModalOverlay();
+    }
+
     function updateQrPosInput() {
+      const cfg = getActiveSketch();
       const xRaw = parseFloat(document.getElementById("qrPosXInput").value);
       const yRaw = parseFloat(document.getElementById("qrPosYInput").value);
-      if (!Number.isNaN(xRaw)) templateConfig.qrX = clamp(xRaw / 100, 0.05, 0.95);
-      if (!Number.isNaN(yRaw)) templateConfig.qrY = clamp(yRaw / 100, 0.05, 0.95);
+      if (!Number.isNaN(xRaw)) cfg.qrX = clamp(xRaw / 100, 0.05, 0.95);
+      if (!Number.isNaN(yRaw)) cfg.qrY = clamp(yRaw / 100, 0.05, 0.95);
       syncModalOverlay();
-      saveTemplateConfig();
+      saveSketchRegistry();
     }
 
     function updateCodePosInput() {
+      const cfg = getActiveSketch();
       const xRaw = parseFloat(document.getElementById("codePosXInput").value);
       const yRaw = parseFloat(document.getElementById("codePosYInput").value);
-      if (!Number.isNaN(xRaw)) templateConfig.codeX = clamp(xRaw / 100, 0.05, 0.95);
-      if (!Number.isNaN(yRaw)) templateConfig.codeY = clamp(yRaw / 100, 0.03, 0.97);
+      if (!Number.isNaN(xRaw)) cfg.codeX = clamp(xRaw / 100, 0.05, 0.95);
+      if (!Number.isNaN(yRaw)) cfg.codeY = clamp(yRaw / 100, 0.03, 0.97);
       syncModalOverlay();
-      saveTemplateConfig();
+      saveSketchRegistry();
     }
 
     function updateQrScale(percentVal) {
-      templateConfig.qrScale = clamp(Number(percentVal) / 100, 0.10, 0.60);
+      const cfg = getActiveSketch();
+      cfg.qrScale = clamp(Number(percentVal) / 100, 0.10, 0.60);
       syncModalOverlay();
-      saveTemplateConfig();
+      saveSketchRegistry();
     }
 
     function updateCodeScale(percentVal) {
-      templateConfig.codeScale = clamp(Number(percentVal) / 100, 0.015, 0.08);
+      const cfg = getActiveSketch();
+      cfg.codeScale = clamp(Number(percentVal) / 100, 0.015, 0.08);
       syncModalOverlay();
-      saveTemplateConfig();
+      saveSketchRegistry();
     }
 
     function updateCodeColor(hexColor) {
-      templateConfig.codeColor = hexColor;
+      const cfg = getActiveSketch();
+      cfg.codeColor = hexColor;
       syncModalOverlay();
-      saveTemplateConfig();
+      saveSketchRegistry();
     }
 
     function toggleShowCode(checked) {
-      templateConfig.showCode = checked;
+      const cfg = getActiveSketch();
+      cfg.showCode = checked;
       syncModalOverlay();
-      saveTemplateConfig();
-    }
-
-    function useDefaultTemplateImage() {
-      templateConfig.src = DEFAULT_TEMPLATE_CONFIG.src;
-      templateConfig.sourceName = DEFAULT_TEMPLATE_CONFIG.sourceName;
-      document.getElementById("customTemplateInput").value = "";
-      document.getElementById("templatePreviewImg").src = templateConfig.src;
-      saveTemplateConfig();
-      syncModalOverlay();
+      saveSketchRegistry();
     }
 
     function handleCustomTemplateUpload(input) {
@@ -1825,17 +2030,18 @@
             dataUrl = c.toDataURL("image/jpeg", 0.9);
           }
 
-          const prevSrc = templateConfig.src;
-          const prevName = templateConfig.sourceName;
-          templateConfig.src = dataUrl;
-          templateConfig.sourceName = `${file.name} (${w}×${h}px)`;
+          const cfg = getActiveSketch();
+          const prevSrc = cfg.customSrc;
+          const prevName = cfg.sourceName;
+          cfg.customSrc = dataUrl;
+          cfg.sourceName = `${cfg.file} · ${file.name} (${w}×${h}px)`;
 
-          if (saveTemplateConfig()) {
+          if (saveSketchRegistry()) {
             document.getElementById("templatePreviewImg").src = dataUrl;
             syncModalOverlay();
           } else {
-            templateConfig.src = prevSrc;
-            templateConfig.sourceName = prevName;
+            cfg.customSrc = prevSrc;
+            cfg.sourceName = prevName;
           }
           input.value = "";
         };
@@ -1845,12 +2051,13 @@
     }
 
     function resetTemplateConfig() {
-      if (!confirm("¿Restablecer la plantilla por defecto y las coordenadas iniciales del QR y del código corto?")) return;
-      localStorage.removeItem(TEMPLATE_STORAGE_KEY);
-      templateConfig = { ...DEFAULT_TEMPLATE_CONFIG };
+      const cfg = getActiveSketch();
+      if (!confirm(`¿Restablecer los ajustes y la imagen de ${cfg.file} a sus valores por defecto?`)) return;
+      sketchRegistry.sketches[cfg.num] = baseSketchPreset(cfg.num);
+      saveSketchRegistry();
       document.getElementById("customTemplateInput").value = "";
-      const img = document.getElementById("templatePreviewImg");
-      img.src = templateConfig.src;
+      const fresh = getActiveSketch();
+      document.getElementById("templatePreviewImg").src = getSketchImageSrc(fresh);
       syncModalOverlay();
     }
 
@@ -1859,11 +2066,14 @@
       container.innerHTML = "";
       document.getElementById("modalShortCodeText").innerText = code;
 
-      new QRCode(container, { text: url, width: 400, height: 400, correctLevel: QRCode.CorrectLevel.M });
+      new QRCode(container, { text: url, width: 400, height: 400 });
 
+      const cfg = getActiveSketch();
+      document.getElementById("sketchSelect").value = String(cfg.num);
       const previewImg = document.getElementById("templatePreviewImg");
-      if (previewImg.getAttribute("src") !== templateConfig.src) {
-        previewImg.src = templateConfig.src;
+      const desiredSrc = getSketchImageSrc(cfg);
+      if (previewImg.getAttribute("src") !== desiredSrc) {
+        previewImg.src = desiredSrc;
       }
 
       const btnDownload = document.getElementById("templateDownloadBtn");
@@ -1874,14 +2084,16 @@
     }
 
     function downloadIntegratedTemplate(url, code) {
+      const cfg = getActiveSketch();
+      const imgSrc = getSketchImageSrc(cfg);
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
 
       const templateImg = new Image();
-      if (!templateConfig.src.startsWith("data:")) {
+      if (!imgSrc.startsWith("data:")) {
         templateImg.crossOrigin = "anonymous";
       }
-      templateImg.src = templateConfig.src;
+      templateImg.src = imgSrc;
 
       templateImg.onload = () => {
         const imgWidth = templateImg.naturalWidth || 1200;
@@ -1894,40 +2106,40 @@
 
         const tempDiv = document.createElement("div");
         document.body.appendChild(tempDiv);
-        new QRCode(tempDiv, { text: url, width: 600, height: 600, correctLevel: QRCode.CorrectLevel.M });
+        new QRCode(tempDiv, { text: url, width: 600, height: 600 });
 
         setTimeout(() => {
           const qrCanvas = tempDiv.querySelector("canvas");
           const qrImg = tempDiv.querySelector("img");
 
           const proceedDrawing = (qrSource) => {
-            const totalBoxSize = imgWidth * templateConfig.qrScale;
-            const pad = totalBoxSize * (14 / 316);
+            const totalBoxSize = imgWidth * cfg.qrScale;
+            const pad = totalBoxSize * (10 / 316);
             const qrInnerSize = totalBoxSize - pad * 2;
 
-            const boxLeft = (imgWidth * templateConfig.qrX) - (totalBoxSize / 2);
-            const boxTop = (imgHeight * templateConfig.qrY) - (totalBoxSize / 2);
+            const boxLeft = (imgWidth * cfg.qrX) - (totalBoxSize / 2);
+            const boxTop = (imgHeight * cfg.qrY) - (totalBoxSize / 2);
 
             ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(boxLeft, boxTop, totalBoxSize, totalBoxSize);
             ctx.drawImage(qrSource, boxLeft + pad, boxTop + pad, qrInnerSize, qrInnerSize);
 
-            if (templateConfig.showCode) {
-              const fontSize = Math.round(imgWidth * templateConfig.codeScale);
-              ctx.fillStyle = templateConfig.codeColor;
+            if (cfg.showCode) {
+              const fontSize = Math.round(imgWidth * cfg.codeScale);
+              ctx.fillStyle = cfg.codeColor;
               ctx.font = `bold ${fontSize}px monospace`;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
 
-              const textX = imgWidth * templateConfig.codeX;
-              const textY = imgHeight * templateConfig.codeY;
+              const textX = imgWidth * cfg.codeX;
+              const textY = imgHeight * cfg.codeY;
               ctx.fillText(code, textX, textY);
             }
 
             const pngUrl = canvas.toDataURL("image/png");
             const downloadLink = document.createElement("a");
             downloadLink.href = pngUrl;
-            downloadLink.download = `${code}.png`;
+            downloadLink.download = `${code}-boceto${cfg.num}.png`;
             document.body.appendChild(downloadLink);
             downloadLink.click();
             document.body.removeChild(downloadLink);
@@ -1949,7 +2161,7 @@
       };
 
       templateImg.onerror = () => {
-        alert(`No se pudo cargar la plantilla "${templateConfig.sourceName}". Verifica el archivo o restablece la plantilla por defecto.`);
+        alert(`No se pudo cargar la plantilla "${cfg.sourceName}". Verifica que ${cfg.file} exista en la carpeta raíz.`);
       };
     }
 
