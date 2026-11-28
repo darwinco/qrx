@@ -169,25 +169,43 @@
       </div>
 
       <!-- CONTROLES, BOTÓN ACTUALIZAR, FILTRO Y BUSCADOR -->
-      <div class="flex flex-col lg:flex-row justify-between items-stretch lg:items-center mb-4 gap-4">
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-          <button onclick="deleteSelectedLinks()" class="bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700 text-sm shadow">Eliminar Seleccionados</button>
-          <button onclick="setActiveSelected(true)" class="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 text-sm shadow">Activar Seleccionados</button>
-          <button onclick="setActiveSelected(false)" class="bg-gray-600 text-white px-4 py-2 rounded font-semibold hover:bg-gray-700 text-sm shadow">Desactivar Seleccionados</button>
-          <button onclick="openBatchZipModal()" class="bg-purple-600 text-white px-4 py-2 rounded font-semibold hover:bg-purple-700 text-sm shadow">📦 Descargar ZIP</button>
-          <button onclick="exportLinksCsv()" class="bg-teal-600 text-white px-4 py-2 rounded font-semibold hover:bg-teal-700 text-sm shadow">📊 Exportar CSV</button>
-          <button onclick="loadLinks()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow flex items-center gap-1">
-            🔄 Actualizar
-          </button>
-          <span id="selectedCount" class="text-gray-600 text-sm">0 elementos seleccionados</span>
+      <div class="flex flex-col gap-3 mb-4">
+        <div class="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <button onclick="deleteSelectedLinks()" class="bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700 text-sm shadow">Eliminar Seleccionados</button>
+            <button onclick="setActiveSelected(true)" class="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 text-sm shadow">Activar Seleccionados</button>
+            <button onclick="setActiveSelected(false)" class="bg-gray-600 text-white px-4 py-2 rounded font-semibold hover:bg-gray-700 text-sm shadow">Desactivar Seleccionados</button>
+            <button onclick="openBatchZipModal()" class="bg-purple-600 text-white px-4 py-2 rounded font-semibold hover:bg-purple-700 text-sm shadow">📦 Descargar ZIP</button>
+            <button onclick="exportLinksCsv()" class="bg-teal-600 text-white px-4 py-2 rounded font-semibold hover:bg-teal-700 text-sm shadow">📊 Exportar CSV</button>
+            <button onclick="loadLinks()" class="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 text-sm shadow flex items-center gap-1">
+              🔄 Actualizar
+            </button>
+            <span id="selectedCount" class="text-gray-600 text-sm">0 elementos seleccionados</span>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+            <select id="statusFilter" onchange="filterLinks()" aria-label="Filtrar por estado" class="p-2 border rounded text-sm bg-white focus:ring-blue-500 focus:border-blue-500">
+              <option value="all">Todos los estados</option>
+              <option value="active">Activos</option>
+              <option value="inactive">Inactivos</option>
+            </select>
+            <input type="text" id="searchInput" oninput="filterLinks()" placeholder="🔍 Buscar por consecutivo, código, URL, notas o usuario..." class="w-full sm:w-72 p-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500">
+          </div>
         </div>
-        <div class="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-          <select id="statusFilter" onchange="filterLinks()" aria-label="Filtrar por estado" class="p-2 border rounded text-sm bg-white focus:ring-blue-500 focus:border-blue-500">
-            <option value="all">Todos los estados</option>
-            <option value="active">Activos</option>
-            <option value="inactive">Inactivos</option>
-          </select>
-          <input type="text" id="searchInput" oninput="filterLinks()" placeholder="🔍 Buscar por consecutivo, código, URL, notas o usuario..." class="w-full sm:w-72 p-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500">
+
+        <!-- VER POR CONSECUTIVO DESDE / HASTA -->
+        <div class="flex flex-wrap items-center gap-2 bg-white px-3 py-2 rounded-lg border text-sm text-gray-700">
+          <span class="font-semibold text-gray-700">Ver consecutivo:</span>
+          <label class="inline-flex items-center gap-1 text-xs sm:text-sm text-gray-600">
+            <span>Desde #</span>
+            <input type="number" id="viewFromSeq" min="1" oninput="filterLinks()" placeholder="1" class="w-20 px-2 py-1 border rounded font-mono text-gray-800 bg-gray-50 focus:bg-white">
+          </label>
+          <label class="inline-flex items-center gap-1 text-xs sm:text-sm text-gray-600">
+            <span>Hasta #</span>
+            <input type="number" id="viewToSeq" min="1" oninput="filterLinks()" placeholder="∞" class="w-20 px-2 py-1 border rounded font-mono text-gray-800 bg-gray-50 focus:bg-white">
+          </label>
+          <button type="button" onclick="clearConsecutiveViewRange()" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2.5 py-1 rounded font-medium">
+            Limpiar rango
+          </button>
         </div>
       </div>
 
@@ -647,7 +665,22 @@
   </div>
 
   <script>
-    const baseUrl = window.location.href.split('?')[0];
+    // =========================================================================
+    // CONFIGURACIÓN DE DOMINIO BASE (PERSONALIZABLE)
+    // Déjalo vacío ("") para usar automáticamente la URL actual del navegador,
+    // o escribe tu dominio/ruta base, por ejemplo: "https://tu-dominio.com/"
+    // =========================================================================
+    const CUSTOM_BASE_URL = "";
+
+    function resolveBaseUrl() {
+      const override = String(CUSTOM_BASE_URL || "").trim();
+      if (override) {
+        return override.split("?")[0];
+      }
+      return window.location.href.split("?")[0];
+    }
+
+    const baseUrl = resolveBaseUrl();
     const urlParams = new URLSearchParams(window.location.search);
     const redirectCode = urlParams.get('r');
     const resetTokenParam = urlParams.get('reset');
@@ -989,12 +1022,20 @@
         allLinksData = assignCreationConsecutives(res.data || []);
         document.getElementById("searchInput").value = "";
         document.getElementById("statusFilter").value = "all";
+        document.getElementById("viewFromSeq").value = "";
+        document.getElementById("viewToSeq").value = "";
         currentPage = 1;
         updateSortIcons();
         filterLinks();
       } else {
         alert("Error: " + res.error);
       }
+    }
+
+    function clearConsecutiveViewRange() {
+      document.getElementById("viewFromSeq").value = "";
+      document.getElementById("viewToSeq").value = "";
+      filterLinks();
     }
 
     function statusBadge(active) {
@@ -1107,12 +1148,20 @@
     function filterLinks() {
       const query = document.getElementById("searchInput").value.trim().toLowerCase();
       const status = document.getElementById("statusFilter").value;
+      const fromRaw = document.getElementById("viewFromSeq").value.trim();
+      const toRaw = document.getElementById("viewToSeq").value.trim();
+      const fromSeq = fromRaw !== "" ? Math.max(1, parseInt(fromRaw, 10) || 1) : null;
+      const toSeq = toRaw !== "" ? Math.max(1, parseInt(toRaw, 10) || 1) : null;
+
       filteredLinksData = allLinksData.filter(link => {
+        const seq = link.consecutive || 0;
+        if (fromSeq !== null && seq < fromSeq) return false;
+        if (toSeq !== null && seq > toSeq) return false;
         if (status === "active" && !link.active) return false;
         if (status === "inactive" && link.active) return false;
         if (!query) return true;
         return (
-          String(link.consecutive).includes(query) ||
+          String(seq).includes(query) ||
           link.shortCode.toLowerCase().includes(query) ||
           link.targetUrl.toLowerCase().includes(query) ||
           (link.notes && link.notes.toLowerCase().includes(query)) ||
@@ -2438,7 +2487,6 @@
           const pngBlob = await canvasToPngBlob(canvas);
           zip.file(`${link.shortCode}.png`, pngBlob);
 
-          // Cede un instante al hilo principal para mantener fluida la interfaz
           await new Promise(r => setTimeout(r, 0));
         }
 
